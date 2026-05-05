@@ -2,13 +2,41 @@
 import argparse
 import json
 import os
+import socket
+import subprocess
 import sys
 from pathlib import Path
+from statistics import mean
 
 # Telemetry opt-out before any deepeval import
 os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "1")
 
-from workflow.prompt_eval.evaluator import MODEL_MAP, DatasetGenerator
+from workflow.prompt_eval.evaluator import MODEL_MAP, DatasetGenerator, Evaluator
+from workflow.prompt_eval.docs_generator import regenerate_for_run
+
+
+MKDOCS_PORT = 8000
+
+
+def _port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def start_mkdocs_if_idle(docs_site_dir: Path) -> None:
+    if _port_in_use(MKDOCS_PORT):
+        print(f"mkdocs already serving at http://127.0.0.1:{MKDOCS_PORT}")
+        return
+    log_path = docs_site_dir / "mkdocs.log"
+    subprocess.Popen(
+        ["uv", "run", "mkdocs", "serve", "--dev-addr", f"127.0.0.1:{MKDOCS_PORT}"],
+        cwd=docs_site_dir,
+        stdout=open(log_path, "ab"),
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    print(f"Started mkdocs serve in background → http://127.0.0.1:{MKDOCS_PORT}")
+    print(f"  log: {log_path}")
 
 
 def list_runs(runs_dir: Path) -> None:
@@ -69,6 +97,65 @@ def _do_generate(task: str, inputs_json: str, num_cases: int, model: str, out_di
     print(f"Generated {len(dataset)} test cases at {out_dir / 'dataset.json'}")
 
 
+def _do_evaluate(
+    version: str, model: str, judge_model: str,
+    out_dir: Path, extra_criteria: str | None,
+) -> None:
+    out_dir = Path(out_dir)
+    meta_file = out_dir / "metadata.json"
+    metadata = json.loads(meta_file.read_text())
+
+    # Warn if judge_model changes from prior runs
+    prior_judge = metadata.get("judge_model")
+    if prior_judge and prior_judge != judge_model:
+        print(
+            f"⚠ Warning: run_id was originally evaluated with judge_model={prior_judge}; "
+            f"you passed judge_model={judge_model}. Cross-version comparability may suffer."
+        )
+
+    dataset = json.loads((out_dir / "dataset.json").read_text())
+    prompt_template = (out_dir / version / "prompt.txt").read_text()
+
+    evaluator = Evaluator(
+        test_model=MODEL_MAP[model],
+        judge_model=MODEL_MAP[judge_model],
+    )
+    results = evaluator.run_evaluation(
+        dataset=dataset,
+        prompt_template=prompt_template,
+        output_file=str(out_dir / version / "output.json"),
+        extra_criteria=extra_criteria,
+    )
+
+    # Ensure output.json is written (works for real + mocked run_evaluation).
+    (out_dir / version / "output.json").write_text(json.dumps(results, indent=2))
+
+    # Update metadata
+    if version not in metadata["versions"]:
+        metadata["versions"].append(version)
+    metadata["judge_model"] = judge_model
+    avg = mean(r["score"] for r in results)
+    metadata.setdefault("version_data", {})[version] = {
+        "avg_score": avg,
+        "pass_rate": 100 * len([r for r in results if r["score"] >= 7]) / len(results),
+    }
+    metadata["latest_avg_score"] = round(avg, 1)
+    meta_file.write_text(json.dumps(metadata, indent=2))
+
+    # Regenerate docs site
+    here = Path(__file__).parent
+    regenerate_for_run(
+        run_dir=out_dir,
+        docs_root=here / "docs-site" / "docs",
+        mkdocs_yml=here / "docs-site" / "mkdocs.yml",
+    )
+
+    # Auto-start mkdocs serve
+    start_mkdocs_if_idle(here / "docs-site")
+
+    print(f"Evaluated {version}: average {avg:.1f}/10")
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="prompt_eval")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -104,6 +191,15 @@ def main(argv: list | None = None) -> int:
             num_cases=args.num_cases,
             model=args.model,
             out_dir=Path(args.out_dir),
+        )
+        return 0
+    if args.cmd == "evaluate":
+        _do_evaluate(
+            version=args.version,
+            model=args.model,
+            judge_model=args.judge_model,
+            out_dir=Path(args.out_dir),
+            extra_criteria=args.extra_criteria,
         )
         return 0
     return 1
