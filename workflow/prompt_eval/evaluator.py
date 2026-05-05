@@ -27,6 +27,9 @@ import concurrent.futures
 import json
 from textwrap import dedent
 from anthropic import Anthropic
+from deepeval.metrics import GEval
+from deepeval.test_case import LLMTestCase, LLMTestCaseParams
+from workflow.prompt_eval.anthropic_llm import AnthropicLLM
 
 
 def _chat(client, model, messages, system=None, temperature=1.0, stop_sequences=None):
@@ -192,3 +195,33 @@ class Evaluator:
             self.test_model,
             [{"role": "user", "content": rendered}],
         )
+
+    def grade_with_geval(
+        self,
+        test_case: dict,
+        output: str,
+        extra_criteria: str | None = None,
+    ) -> dict:
+        """Score one (test_case, output) pair using GEval with Claude as judge."""
+        criteria_lines = "\n".join(f"- {c}" for c in test_case["solution_criteria"])
+        if extra_criteria:
+            criteria_lines += f"\n\nMandatory:\n{extra_criteria}"
+
+        metric = GEval(
+            name="Task Quality",
+            evaluation_steps=[
+                f"Evaluate the output against these criteria:\n{criteria_lines}",
+                "Score 1-10 where 10 = fully meets all criteria.",
+            ],
+            evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+            model=AnthropicLLM(self.judge_model),
+        )
+        tc = LLMTestCase(
+            input=str(test_case["prompt_inputs"]),
+            actual_output=output,
+        )
+        metric.measure(tc)
+        return {
+            "score": round(metric.score * 10),
+            "reasoning": metric.reason,
+        }
