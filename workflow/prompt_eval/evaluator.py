@@ -168,3 +168,27 @@ class DatasetGenerator:
         with open(output_file, "w") as f:
             json.dump(dataset, f, indent=2)
         return dataset
+
+
+class Evaluator:
+    """Run test cases through a prompt and grade the outputs with GEval."""
+
+    def __init__(
+        self,
+        test_model: str = "claude-haiku-4-5",
+        judge_model: str = "claude-sonnet-4-6",
+        max_concurrent_tasks: int = 3,
+    ):
+        self.test_model = test_model
+        self.judge_model = judge_model
+        self.max_concurrent_tasks = max_concurrent_tasks
+        self.client = Anthropic()
+
+    def run_test_case(self, test_case: dict, prompt_template: str) -> str:
+        """Render the template with test_case inputs and call the test model."""
+        rendered = render_prompt(prompt_template, test_case["prompt_inputs"])
+        return _chat(
+            self.client,
+            self.test_model,
+            [{"role": "user", "content": rendered}],
+        )
