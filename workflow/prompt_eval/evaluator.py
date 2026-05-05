@@ -21,3 +21,150 @@ def render_prompt(template: str, variables: dict) -> str:
         if ph in variables:
             result = result.replace("{" + ph + "}", str(variables[ph]))
     return result.replace("{{", "{").replace("}}", "}")
+
+
+import concurrent.futures
+import json
+from textwrap import dedent
+from anthropic import Anthropic
+
+
+def _chat(client, model, messages, system=None, temperature=1.0, stop_sequences=None):
+    params = {
+        "model": model,
+        "max_tokens": 1000,
+        "messages": messages,
+        "temperature": temperature,
+        "stop_sequences": stop_sequences or [],
+    }
+    if system:
+        params["system"] = system
+    return client.messages.create(**params).content[0].text
+
+
+class DatasetGenerator:
+    """Generate diverse test cases for a prompt-evaluation task using Claude."""
+
+    def __init__(self, model: str = "claude-haiku-4-5", max_concurrent_tasks: int = 3):
+        self.model = model
+        self.max_concurrent_tasks = max_concurrent_tasks
+        self.client = Anthropic()
+
+    def generate_unique_ideas(self, task_description, prompt_inputs_spec, num_cases):
+        example_inputs = ",".join(
+            f'"{k}": str # {v}' for k, v in prompt_inputs_spec.items()
+        )
+        prompt = dedent(f"""
+            Generate {num_cases} unique, diverse ideas for testing a prompt that accomplishes this task:
+
+            <task_description>
+            {task_description}
+            </task_description>
+
+            The prompt will receive the following inputs:
+            <prompt_inputs>
+            {example_inputs}
+            </prompt_inputs>
+
+            Each idea should represent a distinct scenario testing different aspects of the task.
+
+            Output Format:
+            Provide a JSON array where each item is a brief description of the idea.
+
+            Ensure each idea is:
+            - Distinct from the others
+            - Relevant to the task
+            - Specific enough to guide a full test case
+            - Solvable with no more than 400 tokens
+
+            Generate exactly {num_cases} ideas.
+        """)
+        messages = [
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": "```json"},
+        ]
+        text = _chat(
+            self.client,
+            self.model,
+            messages,
+            system="You are a test scenario designer.",
+            stop_sequences=["```"],
+        )
+        return json.loads(text)
+
+    def generate_test_case(self, task_description, idea, prompt_inputs_spec):
+        allowed_keys = ", ".join(f'"{k}"' for k in prompt_inputs_spec.keys())
+        example_inputs = "\n".join(
+            f'    "{k}": "EXAMPLE_VALUE", // {v}' for k, v in prompt_inputs_spec.items()
+        )
+        prompt = dedent(f"""
+            Generate a single detailed test case for prompt evaluation based on:
+
+            <task_description>
+            {task_description}
+            </task_description>
+
+            <specific_idea>
+            {idea}
+            </specific_idea>
+
+            <allowed_input_keys>
+            {allowed_keys}
+            </allowed_input_keys>
+
+            Output Format:
+            ```json
+            {{
+                "prompt_inputs": {{
+            {example_inputs}
+                }},
+                "solution_criteria": ["criterion 1", "criterion 2"]
+            }}
+            ```
+
+            REQUIREMENTS:
+            - Use ONLY these input keys: {allowed_keys}
+            - Include all required keys
+            - Solution criteria: 1-4 concise items, tied to the core task
+            - Solvable with no more than 400 tokens
+        """)
+        messages = [
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": "```json"},
+        ]
+        text = _chat(
+            self.client,
+            self.model,
+            messages,
+            system="You are a test case creator.",
+            temperature=0.7,
+            stop_sequences=["```"],
+        )
+        case = json.loads(text)
+        case["task_description"] = task_description
+        case["scenario"] = idea
+        return case
+
+    def generate_dataset(
+        self, task_description, prompt_inputs_spec, num_cases, output_file
+    ):
+        ideas = self.generate_unique_ideas(
+            task_description, prompt_inputs_spec, num_cases
+        )
+        dataset = []
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=self.max_concurrent_tasks
+        ) as ex:
+            futures = [
+                ex.submit(self.generate_test_case, task_description, idea, prompt_inputs_spec)
+                for idea in ideas
+            ]
+            for f in concurrent.futures.as_completed(futures):
+                try:
+                    dataset.append(f.result())
+                except Exception as e:
+                    print(f"Error generating test case: {e}")
+
+        with open(output_file, "w") as f:
+            json.dump(dataset, f, indent=2)
+        return dataset
