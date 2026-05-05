@@ -24,3 +24,6 @@ package = false
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["workflow/prompt_eval/tests"]
+markers = [
+    "e2e: end-to-end test that hits the real Anthropic API",
+]
