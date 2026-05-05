@@ -225,3 +225,34 @@ class Evaluator:
             "score": round(metric.score * 10),
             "reasoning": metric.reason,
         }
+
+    def run_evaluation(
+        self,
+        dataset: list,
+        prompt_template: str,
+        output_file: str,
+        extra_criteria: str | None = None,
+    ) -> list:
+        """Run + grade every case in the dataset; write JSON to output_file."""
+        def _process(case):
+            output = self.run_test_case(case, prompt_template)
+            grade = self.grade_with_geval(case, output, extra_criteria)
+            return {
+                "test_case": case,
+                "output": output,
+                "score": grade["score"],
+                "reasoning": grade["reasoning"],
+            }
+
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=self.max_concurrent_tasks
+        ) as ex:
+            for fut in concurrent.futures.as_completed(
+                [ex.submit(_process, c) for c in dataset]
+            ):
+                results.append(fut.result())
+
+        with open(output_file, "w") as f:
+            json.dump(results, f, indent=2)
+        return results
