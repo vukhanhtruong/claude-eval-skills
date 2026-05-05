@@ -1,4 +1,5 @@
 """Generate MkDocs Material pages from runs/ data."""
+import json
 from statistics import mean
 
 
@@ -175,3 +176,61 @@ def update_mkdocs_nav(
         runs_list.append({run_id: pages})
 
     config_path.write_text(yaml.safe_dump(cfg, sort_keys=False))
+
+
+def render_summary_page(run_id: str, metadata: dict, versions: list) -> str:
+    """Render the per-run summary (links to versions, models used, dataset link)."""
+    rows = []
+    for v in versions:
+        scores = [r["score"] for r in v["results"]]
+        avg = _mean(scores) if scores else 0
+        rows.append(f"| [{v['label']}]({v['label']}.md) | {avg:.1f}/10 | {len(scores)} |")
+    table = "\n".join(rows)
+
+    return f"""# Run {run_id} — Summary
+
+**Test model:** `{metadata.get('test_model', '?')}`  &nbsp;
+**Judge model:** `{metadata.get('judge_model', '?')}`
+
+| Version | Average | Cases |
+|---|---|---|
+{table}
+
+[View full comparison](comparison.md){{: .md-button }}
+"""
+
+
+def regenerate_for_run(run_dir, docs_root, mkdocs_yml) -> None:
+    """Read run_dir/{metadata,outputs}, write Markdown to docs_root, update nav."""
+    from pathlib import Path as _Path
+    run_dir = _Path(run_dir)
+    docs_root = _Path(docs_root)
+
+    metadata = json.loads((run_dir / "metadata.json").read_text())
+    run_id = metadata.get("run_id") or run_dir.name
+    version_labels = metadata.get("versions", [])
+
+    versions = []
+    for label in version_labels:
+        prompt_text = (run_dir / label / "prompt.txt").read_text()
+        results = json.loads((run_dir / label / "output.json").read_text())
+        versions.append({"label": label, "prompt": prompt_text, "results": results})
+
+    out_dir = docs_root / "runs" / run_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Summary
+    (out_dir / "index.md").write_text(render_summary_page(run_id, metadata, versions))
+
+    # Per-version pages
+    for v in versions:
+        page = render_version_page(v["label"], v["prompt"], v["results"])
+        (out_dir / f"{v['label']}.md").write_text(page)
+
+    # Comparison (only if 2+ versions)
+    if len(versions) >= 2:
+        (out_dir / "comparison.md").write_text(
+            render_comparison_page(run_id, versions)
+        )
+
+    update_mkdocs_nav(mkdocs_yml, run_id, version_labels)
