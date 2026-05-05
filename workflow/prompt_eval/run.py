@@ -8,6 +8,8 @@ from pathlib import Path
 # Telemetry opt-out before any deepeval import
 os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "1")
 
+from workflow.prompt_eval.evaluator import MODEL_MAP, DatasetGenerator
+
 
 def list_runs(runs_dir: Path) -> None:
     runs_dir = Path(runs_dir)
@@ -31,6 +33,40 @@ def list_runs(runs_dir: Path) -> None:
         avg = meta.get("latest_avg_score", 0)
         size = meta.get("dataset_size", "?")
         print(f"  {run_path.name}  {size} cases  {version_str}  avg {avg}")
+
+
+def _do_generate(task: str, inputs_json: str, num_cases: int, model: str, out_dir: Path) -> None:
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    inputs_spec = json.loads(inputs_json)
+    sdk_model = MODEL_MAP[model]
+
+    gen = DatasetGenerator(model=sdk_model)
+    dataset_file = out_dir / "dataset.json"
+    dataset = gen.generate_dataset(
+        task_description=task,
+        prompt_inputs_spec=inputs_spec,
+        num_cases=num_cases,
+        output_file=str(dataset_file),
+    )
+    if not dataset_file.exists():
+        dataset_file.write_text(json.dumps(dataset, indent=2))
+
+    meta_file = out_dir / "metadata.json"
+    metadata = {
+        "run_id": out_dir.name,
+        "task": task,
+        "inputs_spec": inputs_spec,
+        "test_model": model,
+        "judge_model": None,  # filled on first evaluate
+        "dataset_size": len(dataset),
+        "versions": [],
+        "version_data": {},
+        "latest_avg_score": None,
+    }
+    meta_file.write_text(json.dumps(metadata, indent=2))
+    print(f"Generated {len(dataset)} test cases at {out_dir / 'dataset.json'}")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -61,7 +97,15 @@ def main(argv: list | None = None) -> int:
     if args.cmd == "list-runs":
         list_runs(here / "runs")
         return 0
-    # generate / evaluate handled in later tasks
+    if args.cmd == "generate":
+        _do_generate(
+            task=args.task,
+            inputs_json=args.inputs,
+            num_cases=args.num_cases,
+            model=args.model,
+            out_dir=Path(args.out_dir),
+        )
+        return 0
     return 1
 
 
