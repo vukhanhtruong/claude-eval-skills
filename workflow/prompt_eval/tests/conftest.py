@@ -1,5 +1,4 @@
 """Shared pytest fixtures for prompt_eval tests."""
-import json
 from unittest.mock import MagicMock, patch
 import pytest
 
