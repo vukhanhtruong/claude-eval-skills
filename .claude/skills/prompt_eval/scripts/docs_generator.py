@@ -3,6 +3,11 @@ import json
 from statistics import mean
 
 
+# Front matter that tells the Material theme to hide the right-hand TOC sidebar
+# on generated pages. Reclaims horizontal reading space; users navigate via the
+# left sidebar instead. Applied to summary, version, and comparison pages.
+_HIDE_TOC_FRONT_MATTER = "---\nhide:\n  - toc\n---\n\n"
+
 _BADGE_STYLE = (
     "background:{bg};color:{fg};padding:5px 10px;"
     "border-radius:3px;font-weight:bold"
@@ -37,7 +42,7 @@ def render_version_page(version_label: str, prompt_text: str, results: list) -> 
 
     table = "\n".join(rows)
 
-    return f"""# Version {version_label}
+    return f"""{_HIDE_TOC_FRONT_MATTER}# Version {version_label}
 
 **Average:** {score_badge(round(avg))} {avg:.1f}/10  &nbsp;
 **Pass rate (≥7):** {pass_rate:.0f}%
@@ -122,7 +127,7 @@ def render_comparison_page(run_id: str, versions: list) -> str:
 
     tabs_block = "\n".join(tabs)
 
-    return f"""# Run {run_id} — Comparison
+    return f"""{_HIDE_TOC_FRONT_MATTER}# Run {run_id} — Comparison
 
 {summary_cells}
 
@@ -187,7 +192,7 @@ def render_summary_page(run_id: str, metadata: dict, versions: list) -> str:
         rows.append(f"| [{v['label']}]({v['label']}.md) | {avg:.1f}/10 | {len(scores)} |")
     table = "\n".join(rows)
 
-    return f"""# Run {run_id} — Summary
+    return f"""{_HIDE_TOC_FRONT_MATTER}# Run {run_id} — Summary
 
 **Test model:** `{metadata.get('test_model', '?')}`  &nbsp;
 **Judge model:** `{metadata.get('judge_model', '?')}`
