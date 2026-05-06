@@ -64,6 +64,82 @@ def _resolve_runs_dir(prompt_name: str) -> Path:
     return _resolve_prompts_dir() / prompt_name / "runs"
 
 
+def _migrate_legacy_layout(artifact_root: Path) -> bool:
+    """Move legacy ``runs/`` and ``docs-site/docs/runs/`` into the new
+    ``prompts/default/`` namespace. Returns True if anything moved.
+
+    Only runs when ``runs/`` exists AND ``prompts/`` does not. Anything
+    else is a no-op so we never clobber a partially-migrated tree.
+    """
+    artifact_root = Path(artifact_root)
+    legacy_runs = artifact_root / "runs"
+    new_prompts = artifact_root / "prompts"
+
+    if not legacy_runs.exists() or new_prompts.exists():
+        return False
+
+    # 1. Move the runs/ directory under prompts/default/runs/
+    target_runs = new_prompts / "default" / "runs"
+    target_runs.parent.mkdir(parents=True, exist_ok=True)
+    legacy_runs.rename(target_runs)
+
+    # 2. Stamp prompt_name="default" into each run's metadata if missing
+    for run_dir in target_runs.iterdir():
+        if not run_dir.is_dir():
+            continue
+        meta_path = run_dir / "metadata.json"
+        if not meta_path.exists():
+            continue
+        meta = json.loads(meta_path.read_text())
+        meta.setdefault("prompt_name", "default")
+        meta_path.write_text(json.dumps(meta, indent=2))
+
+    # 3. Move docs-site pages: docs/runs/ -> docs/prompts/default/runs/
+    docs_runs = artifact_root / "docs-site" / "docs" / "runs"
+    if docs_runs.exists():
+        target_docs_runs = artifact_root / "docs-site" / "docs" / "prompts" / "default" / "runs"
+        target_docs_runs.parent.mkdir(parents=True, exist_ok=True)
+        docs_runs.rename(target_docs_runs)
+
+    # 4. Rewrite mkdocs.yml nav: replace top-level "Runs" with nested
+    #    "Prompts > default > <run_id>" structure
+    cfg_path = artifact_root / "docs-site" / "mkdocs.yml"
+    if cfg_path.exists():
+        import yaml as _yaml  # local import to avoid widening top-of-file imports
+        cfg = _yaml.safe_load(cfg_path.read_text())
+        nav = cfg.get("nav", [])
+        new_nav = []
+        legacy_runs_entries = []
+        for item in nav:
+            if isinstance(item, dict) and "Runs" in item:
+                legacy_runs_entries = item["Runs"]  # list of {run_id: [pages]}
+            else:
+                new_nav.append(item)
+        if legacy_runs_entries:
+            # Rewrite each page path: runs/<id>/X.md -> prompts/default/runs/<id>/X.md
+            rewritten = []
+            for run_dict in legacy_runs_entries:
+                # run_dict looks like {"run_001": [{"Summary": "runs/run_001/index.md"}, ...]}
+                for run_id, pages in run_dict.items():
+                    new_pages = []
+                    for page in pages:
+                        for title, path in page.items():
+                            new_pages.append({
+                                title: path.replace(
+                                    f"runs/{run_id}/",
+                                    f"prompts/default/runs/{run_id}/",
+                                    1,
+                                ),
+                            })
+                    rewritten.append({run_id: new_pages})
+            new_nav.append({"Prompts": [{"default": rewritten}]})
+        cfg["nav"] = new_nav
+        cfg_path.write_text(_yaml.safe_dump(cfg, sort_keys=False))
+
+    print(f"Migrated legacy runs/ to prompts/default/")
+    return True
+
+
 def _bootstrap_docs_site(target: Path) -> None:
     """Copy the bundled docs-site template to `target` if `target/mkdocs.yml` doesn't exist.
 
@@ -372,6 +448,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list | None = None) -> int:
     args = _build_parser().parse_args(argv)
     artifact_root = _resolve_artifact_root()
+    _migrate_legacy_layout(artifact_root)
 
     if args.cmd == "list-runs":
         list_runs(_resolve_runs_dir(args.prompt))
