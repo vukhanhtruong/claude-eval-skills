@@ -164,6 +164,28 @@ def list_runs(runs_dir: Path) -> None:
         print(f"  {run_path.name}  {size} cases  {version_str}  avg {avg}")
 
 
+def list_prompts(prompts_dir: Path) -> None:
+    """Print each prompt namespace with its run count."""
+    prompts_dir = Path(prompts_dir)
+    if not prompts_dir.exists() or not any(prompts_dir.iterdir()):
+        print("No prompts found.")
+        return
+
+    print("Available prompts:")
+    for entry in sorted(prompts_dir.iterdir()):
+        if not entry.is_dir():
+            continue
+        runs_dir = entry / "runs"
+        if not runs_dir.exists():
+            count = 0
+        else:
+            count = sum(
+                1 for r in runs_dir.iterdir()
+                if r.is_dir() and (r / "metadata.json").exists()
+            )
+        print(f"  {entry.name}  {count} runs")
+
+
 def _do_generate(
     task: str, inputs_json: str, num_cases: int, model: str,
     out_dir: Path, prompt_name: str,
@@ -318,7 +340,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="prompt-eval")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("list-runs", help="List existing runs and exit")
+    lr = sub.add_parser("list-runs", help="List existing runs for one prompt")
+    lr.add_argument("--prompt", required=True, help="prompt name, e.g. summarizer")
+
+    sub.add_parser("list-prompts", help="List all prompt namespaces with run counts")
 
     g = sub.add_parser("generate", help="Generate dataset")
     g.add_argument("--task", required=True)
@@ -347,10 +372,12 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list | None = None) -> int:
     args = _build_parser().parse_args(argv)
     artifact_root = _resolve_artifact_root()
-    runs_dir = artifact_root / "runs"
 
     if args.cmd == "list-runs":
-        list_runs(runs_dir)
+        list_runs(_resolve_runs_dir(args.prompt))
+        return 0
+    if args.cmd == "list-prompts":
+        list_prompts(_resolve_prompts_dir())
         return 0
     if args.cmd == "generate":
         runs_dir = _resolve_runs_dir(args.prompt)
