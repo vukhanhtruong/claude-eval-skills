@@ -103,5 +103,5 @@ Or invoke the skill end-to-end (Claude Code parses `$ARGUMENTS` and orchestrates
 - **Run tests from inside the skill dir.** `cd .claude/skills/prompt_eval && uv run pytest`. The repo root has no `pyproject.toml`.
 - **The verbatim coaching prompts and the failure-pattern→remedy table in `SKILL.md` are the product.** Copy them exactly from the design spec; rewording weakens the skill's grounding in named Anthropic techniques.
 - **Run isolation:** each `/prompt_eval` invocation = one new `run_NNN` directory; resume is opt-in via `--resume`. Don't fold versions across runs.
-- **Don't edit files under `prompt_eval_runs/docs-site/docs/runs/` directly** — they're regenerated from `runs/`. Edit the source data instead.
+- **Don't edit files under `prompt_eval_runs/docs-site/docs/prompts/<name>/runs/` directly** — they're regenerated from `prompt_eval_runs/prompts/<name>/runs/`. Edit the source data instead.
 - **Working with multiple prompts:** keep them in distinct `--prompt` namespaces. Run IDs reset per prompt; both can have a `run_001`. The docs nav groups them under `Prompts > <name> > <run_id>`.
