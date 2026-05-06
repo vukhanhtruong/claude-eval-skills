@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -16,6 +17,25 @@ from prompt_eval.docs_generator import regenerate_for_run
 
 
 MKDOCS_PORT = 8000
+
+
+def _bootstrap_docs_site(target: Path) -> None:
+    """Copy the bundled docs-site template to `target` if `target/mkdocs.yml` doesn't exist.
+
+    Runs once per project — first time the user evaluates a prompt. After that, the per-project
+    docs-site is the source of truth (the user can theme it, add nav entries, etc.).
+    """
+    if (target / "mkdocs.yml").exists():
+        return
+    template_dir = Path(__file__).parent / "docs-site-template"
+    target.mkdir(parents=True, exist_ok=True)
+    # Copy contents (not the template_dir itself).
+    for item in template_dir.iterdir():
+        dest = target / item.name
+        if item.is_dir():
+            shutil.copytree(item, dest, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, dest)
 
 
 def _port_in_use(port: int) -> bool:
