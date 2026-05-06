@@ -1,6 +1,6 @@
 """Tests for the AnthropicLLM adapter."""
 from unittest.mock import MagicMock, patch
-from workflow.prompt_eval.anthropic_llm import AnthropicLLM
+from prompt_eval.anthropic_llm import AnthropicLLM
 
 
 def test_get_model_name_returns_configured_model():
@@ -9,7 +9,7 @@ def test_get_model_name_returns_configured_model():
 
 
 def test_generate_calls_anthropic_with_user_message(mock_anthropic_response):
-    with patch("workflow.prompt_eval.anthropic_llm.Anthropic") as cls:
+    with patch("prompt_eval.anthropic_llm.Anthropic") as cls:
         client = MagicMock()
         client.messages.create.return_value = mock_anthropic_response("graded: 8")
         cls.return_value = client
@@ -25,6 +25,6 @@ def test_generate_calls_anthropic_with_user_message(mock_anthropic_response):
 
 
 def test_load_model_returns_client():
-    with patch("workflow.prompt_eval.anthropic_llm.Anthropic"):
+    with patch("prompt_eval.anthropic_llm.Anthropic"):
         llm = AnthropicLLM()
         assert llm.load_model() is llm.client

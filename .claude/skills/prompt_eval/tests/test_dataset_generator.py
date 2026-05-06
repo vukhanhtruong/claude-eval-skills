@@ -1,10 +1,10 @@
 """Tests for DatasetGenerator (Anthropic API mocked)."""
 import json
 from unittest.mock import patch
-from workflow.prompt_eval.evaluator import DatasetGenerator
+from prompt_eval.evaluator import DatasetGenerator
 
 
-@patch("workflow.prompt_eval.evaluator.Anthropic")
+@patch("prompt_eval.evaluator.Anthropic")
 def test_generate_unique_ideas_parses_json_array(anthropic_cls, mock_anthropic_response):
     client = anthropic_cls.return_value
     client.messages.create.return_value = mock_anthropic_response(
@@ -15,7 +15,7 @@ def test_generate_unique_ideas_parses_json_array(anthropic_cls, mock_anthropic_r
     assert ideas == ["Vegan runner", "Diabetic powerlifter", "High-cholesterol athlete"]
 
 
-@patch("workflow.prompt_eval.evaluator.Anthropic")
+@patch("prompt_eval.evaluator.Anthropic")
 def test_generate_test_case_returns_full_record(anthropic_cls, mock_anthropic_response):
     client = anthropic_cls.return_value
     client.messages.create.return_value = mock_anthropic_response(json.dumps({
@@ -34,7 +34,7 @@ def test_generate_test_case_returns_full_record(anthropic_cls, mock_anthropic_re
     assert "Includes calories" in tc["solution_criteria"]
 
 
-@patch("workflow.prompt_eval.evaluator.Anthropic")
+@patch("prompt_eval.evaluator.Anthropic")
 def test_generate_dataset_writes_json(anthropic_cls, mock_anthropic_response, tmp_path):
     # First call → ideas list. Subsequent calls → test cases.
     client = anthropic_cls.return_value

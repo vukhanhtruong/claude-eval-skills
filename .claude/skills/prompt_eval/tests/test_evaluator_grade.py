@@ -1,11 +1,11 @@
 """Tests for Evaluator.grade_with_geval (GEval mocked)."""
 from unittest.mock import patch, MagicMock
-from workflow.prompt_eval.evaluator import Evaluator
+from prompt_eval.evaluator import Evaluator
 
 
-@patch("workflow.prompt_eval.evaluator.AnthropicLLM")
-@patch("workflow.prompt_eval.evaluator.GEval")
-@patch("workflow.prompt_eval.evaluator.Anthropic")
+@patch("prompt_eval.evaluator.AnthropicLLM")
+@patch("prompt_eval.evaluator.GEval")
+@patch("prompt_eval.evaluator.Anthropic")
 def test_grade_returns_score_and_reasoning(
     anthropic_cls, geval_cls, anthropic_llm_cls, sample_test_case
 ):
@@ -25,9 +25,9 @@ def test_grade_returns_score_and_reasoning(
     metric.measure.assert_called_once()
 
 
-@patch("workflow.prompt_eval.evaluator.AnthropicLLM")
-@patch("workflow.prompt_eval.evaluator.GEval")
-@patch("workflow.prompt_eval.evaluator.Anthropic")
+@patch("prompt_eval.evaluator.AnthropicLLM")
+@patch("prompt_eval.evaluator.GEval")
+@patch("prompt_eval.evaluator.Anthropic")
 def test_grade_builds_evaluation_steps_from_solution_criteria(
     anthropic_cls, geval_cls, anthropic_llm_cls, sample_test_case
 ):

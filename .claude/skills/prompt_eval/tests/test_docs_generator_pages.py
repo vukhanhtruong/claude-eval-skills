@@ -1,5 +1,5 @@
 """Tests for score-badge HTML and per-version page generation."""
-from workflow.prompt_eval.docs_generator import score_badge, render_version_page
+from prompt_eval.docs_generator import score_badge, render_version_page
 
 
 def test_score_badge_green_for_high_scores():

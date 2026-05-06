@@ -1,6 +1,6 @@
 """Tests for comparison page rendering and mkdocs.yml nav updates."""
 import yaml
-from workflow.prompt_eval.docs_generator import (
+from prompt_eval.docs_generator import (
     render_comparison_page,
     update_mkdocs_nav,
 )

@@ -1,12 +1,12 @@
 """Tests for the evaluate subcommand."""
 import json
 from unittest.mock import patch, MagicMock
-from workflow.prompt_eval.run import _do_evaluate
+from prompt_eval.run import _do_evaluate
 
 
-@patch("workflow.prompt_eval.run.regenerate_for_run")
-@patch("workflow.prompt_eval.run.start_mkdocs_if_idle")
-@patch("workflow.prompt_eval.run.Evaluator")
+@patch("prompt_eval.run.regenerate_for_run")
+@patch("prompt_eval.run.start_mkdocs_if_idle")
+@patch("prompt_eval.run.Evaluator")
 def test_evaluate_writes_outputs_and_updates_metadata(
     eval_cls, start_mkdocs, regen, tmp_path
 ):
@@ -51,9 +51,9 @@ def test_evaluate_writes_outputs_and_updates_metadata(
     start_mkdocs.assert_called_once()
 
 
-@patch("workflow.prompt_eval.run.regenerate_for_run")
-@patch("workflow.prompt_eval.run.start_mkdocs_if_idle")
-@patch("workflow.prompt_eval.run.Evaluator")
+@patch("prompt_eval.run.regenerate_for_run")
+@patch("prompt_eval.run.start_mkdocs_if_idle")
+@patch("prompt_eval.run.Evaluator")
 def test_evaluate_warns_when_judge_model_changes(
     eval_cls, start_mkdocs, regen, tmp_path, capsys
 ):

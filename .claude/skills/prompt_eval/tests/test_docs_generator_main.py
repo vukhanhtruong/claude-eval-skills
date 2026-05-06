@@ -1,7 +1,7 @@
 """Tests for regenerate_for_run end-to-end Markdown generation."""
 import json
 import yaml
-from workflow.prompt_eval.docs_generator import regenerate_for_run
+from prompt_eval.docs_generator import regenerate_for_run
 
 
 def test_regenerate_for_run_writes_all_pages(tmp_path):

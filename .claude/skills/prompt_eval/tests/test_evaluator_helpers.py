@@ -1,6 +1,6 @@
 """Tests for module-level helpers in evaluator.py."""
 import os
-from workflow.prompt_eval.evaluator import MODEL_MAP, render_prompt
+from prompt_eval.evaluator import MODEL_MAP, render_prompt
 
 
 def test_model_map_has_three_aliases():
@@ -31,5 +31,5 @@ def test_render_prompt_handles_escaped_braces():
 
 def test_telemetry_opt_out_set_on_import():
     # importing the module should opt out
-    import workflow.prompt_eval.evaluator  # noqa: F401
+    import prompt_eval.evaluator  # noqa: F401
     assert os.environ.get("DEEPEVAL_TELEMETRY_OPT_OUT") == "1"

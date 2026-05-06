@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 import pytest
-from workflow.prompt_eval.run import _do_generate, _do_evaluate
+from prompt_eval.run import _do_generate, _do_evaluate
 
 
 @pytest.mark.e2e

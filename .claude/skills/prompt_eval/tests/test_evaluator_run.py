@@ -1,9 +1,9 @@
 """Tests for Evaluator.run_test_case."""
 from unittest.mock import patch
-from workflow.prompt_eval.evaluator import Evaluator
+from prompt_eval.evaluator import Evaluator
 
 
-@patch("workflow.prompt_eval.evaluator.Anthropic")
+@patch("prompt_eval.evaluator.Anthropic")
 def test_run_test_case_renders_template_and_calls_model(
     anthropic_cls, mock_anthropic_response, sample_test_case
 ):

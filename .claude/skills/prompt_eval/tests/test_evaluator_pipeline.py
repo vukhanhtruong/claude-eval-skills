@@ -1,12 +1,12 @@
 """Tests for Evaluator.run_evaluation."""
 import json
 from unittest.mock import patch, MagicMock
-from workflow.prompt_eval.evaluator import Evaluator
+from prompt_eval.evaluator import Evaluator
 
 
-@patch("workflow.prompt_eval.evaluator.AnthropicLLM")
-@patch("workflow.prompt_eval.evaluator.GEval")
-@patch("workflow.prompt_eval.evaluator.Anthropic")
+@patch("prompt_eval.evaluator.AnthropicLLM")
+@patch("prompt_eval.evaluator.GEval")
+@patch("prompt_eval.evaluator.Anthropic")
 def test_run_evaluation_writes_output_json(
     anthropic_cls, geval_cls, anthropic_llm_cls, sample_test_case, tmp_path
 ):

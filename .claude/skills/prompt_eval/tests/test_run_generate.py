@@ -1,10 +1,10 @@
 """Tests for the generate subcommand."""
 import json
 from unittest.mock import patch, MagicMock
-from workflow.prompt_eval.run import _do_generate
+from prompt_eval.run import _do_generate
 
 
-@patch("workflow.prompt_eval.run.DatasetGenerator")
+@patch("prompt_eval.run.DatasetGenerator")
 def test_generate_writes_dataset_json_and_metadata(gen_cls, tmp_path):
     gen = gen_cls.return_value
     gen.generate_dataset.return_value = [
