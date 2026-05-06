@@ -11,8 +11,8 @@ from statistics import mean
 # Telemetry opt-out before any deepeval import
 os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "1")
 
-from workflow.prompt_eval.evaluator import MODEL_MAP, DatasetGenerator, Evaluator
-from workflow.prompt_eval.docs_generator import regenerate_for_run
+from prompt_eval.evaluator import MODEL_MAP, DatasetGenerator, Evaluator
+from prompt_eval.docs_generator import regenerate_for_run
 
 
 MKDOCS_PORT = 8000

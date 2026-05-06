@@ -29,7 +29,7 @@ from textwrap import dedent
 from anthropic import Anthropic
 from deepeval.metrics import GEval
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
-from workflow.prompt_eval.anthropic_llm import AnthropicLLM
+from prompt_eval.anthropic_llm import AnthropicLLM
 
 
 def _chat(client, model, messages, system=None, temperature=1.0, stop_sequences=None):
