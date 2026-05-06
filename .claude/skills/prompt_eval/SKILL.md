@@ -1,7 +1,7 @@
 ---
 name: prompt_eval
 description: Build, test, and iteratively improve a Claude prompt with grounded coaching and empirical scoring. Walks the user through 5 steps applying Anthropic's prompt-engineering best practices, runs evaluations with DeepEval (Claude as judge), produces an MkDocs site, and proposes principle-grounded improvements.
-argument-hint: [--model haiku|sonnet|opus] [--judge-model haiku|sonnet|opus] [--cases N] [--resume run_NNN] [--list]
+argument-hint: [--prompt name] [--model haiku|sonnet|opus] [--judge-model haiku|sonnet|opus] [--cases N] [--resume run_NNN] [--list] [--list-prompts]
 allowed-tools: Read, Write, Edit, Bash
 ---
 
@@ -10,25 +10,38 @@ You are running the `/prompt_eval` workflow. Follow these steps strictly.
 ## Argument parsing
 
 Parse `$ARGUMENTS`:
+- `--prompt <name>` — which prompt you're iterating on (e.g. `summarizer`, `code_reviewer`). Required for every flow except `--list-prompts`. Names must match `[a-z0-9_-]+`.
 - `--model haiku|sonnet|opus` (default `haiku`) — model under test
 - `--judge-model haiku|sonnet|opus` (default `sonnet`) — grader model
 - `--cases N` (default `3`) — number of test cases
-- `--resume run_NNN` — reopen an existing run
-- `--list` — list runs and exit
+- `--resume run_NNN` — reopen an existing run (within the chosen `--prompt`)
+- `--list` — list runs for the chosen `--prompt` and stop
+- `--list-prompts` — list every prompt namespace with run counts and stop
 
-If `--list`:
+If `--list-prompts`:
 ```bash
-uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-runs
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-prompts
 ```
 Print output and stop.
 
+If `--list` (requires `--prompt`):
+```bash
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-runs --prompt <name>
+```
+Print output and stop.
+
+If `--prompt` is missing for any non-`--list-prompts` flow:
+- First, run `prompt-eval list-prompts` to show what's already in this project.
+- Ask the user: "Which prompt are you iterating on? Pick one of the above, or type a new name (lowercase letters, digits, `_`, `-` only)."
+- Use the user's answer as `--prompt` for the rest of the flow.
+
 If `--resume <run_id>`:
-- Verify `prompt_eval_runs/runs/<run_id>/dataset.json` exists (relative to the user's project dir). If not, run `list-runs` and ask the user to pick.
-- Read `prompt_eval_runs/runs/<run_id>/metadata.json`.
+- Verify `prompt_eval_runs/prompts/<prompt>/runs/<run_id>/dataset.json` exists (relative to the user's project dir). If not, run `prompt-eval list-runs --prompt <prompt>` and ask the user to pick.
+- Read `prompt_eval_runs/prompts/<prompt>/runs/<run_id>/metadata.json`.
 - Print: dataset size, prior versions, prior average scores, models used.
 - Skip Steps 1 & 2 below; jump to Step 5 with the latest version's data.
 
-Otherwise, start fresh from Step 1. Auto-increment run number: count existing `prompt_eval_runs/runs/run_*` directories (relative to the user's project dir); the new one is `run_{count+1:03d}`.
+Otherwise, start fresh from Step 1. Auto-increment run number: count existing `prompt_eval_runs/prompts/<prompt>/runs/run_*` directories (relative to the user's project dir); the new one is `run_{count+1:03d}`.
 
 ---
 
@@ -107,7 +120,7 @@ Show the assembled prompt. Annotate which Anthropic principle each section serve
 
 > "Use as-is, edit inline, paste your own, or restart wizard?"
 
-Save the chosen prompt to `prompt_eval_runs/runs/run_NNN/v1/prompt.txt` (create parent dirs as needed).
+Save the chosen prompt to `prompt_eval_runs/prompts/<prompt>/runs/run_NNN/v1/prompt.txt` (create parent dirs as needed).
 
 ---
 
@@ -116,6 +129,7 @@ Save the chosen prompt to `prompt_eval_runs/runs/run_NNN/v1/prompt.txt` (create 
 Run:
 ```bash
 uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval generate \
+  --prompt {prompt} \
   --task "{task_description}" \
   --inputs '{inputs_spec_json}' \
   --num-cases {cases} \
@@ -123,7 +137,7 @@ uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval generate \
   --run-id run_NNN
 ```
 
-Read `prompt_eval_runs/runs/run_NNN/dataset.json`. Show the user a brief summary of each generated test case (scenario + key inputs).
+Read `prompt_eval_runs/prompts/{prompt}/runs/run_NNN/dataset.json`. Show the user a brief summary of each generated test case (scenario + key inputs).
 
 ---
 
@@ -132,6 +146,7 @@ Read `prompt_eval_runs/runs/run_NNN/dataset.json`. Show the user a brief summary
 Run:
 ```bash
 uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval evaluate \
+  --prompt {prompt} \
   --version v{n} \
   --model {model} \
   --judge-model {judge_model} \
@@ -148,7 +163,7 @@ Stream output. When complete, the script auto-regenerates the docs site and star
 
 Get the structured scoreboard:
 ```bash
-uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval show --run-id run_NNN --version v{n} --json
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval show --prompt {prompt} --run-id run_NNN --version v{n} --json
 ```
 
 Parse the JSON output (it has `run_id`, `version`, `average_score`, `pass_rate`, and a `cases` list with `scenario`, `score`, `output_length`, `reasoning` per case). Render it back to the user as this Markdown table:
@@ -156,7 +171,7 @@ Parse the JSON output (it has `run_id`, `version`, `average_score`, `pass_rate`,
 | Scenario | Score | Reasoning |
 |---|---|---|
 
-Print average and pass rate. Print the URL to the version page (e.g. `http://127.0.0.1:8000/runs/run_001/v1/`).
+Print average and pass rate. Print the URL to the version page (e.g. `http://127.0.0.1:8000/prompts/{prompt}/runs/run_001/v1/`).
 
 Then analyze low-scoring cases (score < 7). For each, classify the failure pattern using this table:
 
@@ -183,11 +198,11 @@ Offer:
 
 If a/b/c chosen:
 - Compute the next version label `v{n+1}`.
-- Save the new prompt to `prompt_eval_runs/runs/run_NNN/v{n+1}/prompt.txt` (create parent dirs as needed).
+- Save the new prompt to `prompt_eval_runs/prompts/{prompt}/runs/run_NNN/v{n+1}/prompt.txt` (create parent dirs as needed).
 - Run Step 3 with `--version v{n+1}`.
 - Run Step 4.
 - Loop back to Step 5.
 
 If d) Done:
-- Tell the user: "Comparison report at `http://127.0.0.1:8000/runs/run_NNN/comparison/` (if 2+ versions). All runs at `http://127.0.0.1:8000/`."
+- Tell the user: "Comparison report at `http://127.0.0.1:8000/prompts/{prompt}/runs/run_NNN/comparison/` (if 2+ versions). All runs at `http://127.0.0.1:8000/`."
 - Stop.
