@@ -18,17 +18,17 @@ Parse `$ARGUMENTS`:
 
 If `--list`:
 ```bash
-cd workflow/prompt_eval && uv run python run.py list-runs
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-runs
 ```
 Print output and stop.
 
 If `--resume <run_id>`:
-- Verify `workflow/prompt_eval/runs/<run_id>/dataset.json` exists. If not, run `list-runs` and ask the user to pick.
-- Read `workflow/prompt_eval/runs/<run_id>/metadata.json`.
+- Verify `prompt_eval_runs/runs/<run_id>/dataset.json` exists (relative to the user's project dir). If not, run `list-runs` and ask the user to pick.
+- Read `prompt_eval_runs/runs/<run_id>/metadata.json`.
 - Print: dataset size, prior versions, prior average scores, models used.
 - Skip Steps 1 & 2 below; jump to Step 5 with the latest version's data.
 
-Otherwise, start fresh from Step 1. Auto-increment run number: count existing `runs/run_*` directories; the new one is `run_{count+1:03d}`.
+Otherwise, start fresh from Step 1. Auto-increment run number: count existing `prompt_eval_runs/runs/run_*` directories (relative to the user's project dir); the new one is `run_{count+1:03d}`.
 
 ---
 
@@ -107,7 +107,7 @@ Show the assembled prompt. Annotate which Anthropic principle each section serve
 
 > "Use as-is, edit inline, paste your own, or restart wizard?"
 
-Save the chosen prompt to `workflow/prompt_eval/runs/run_NNN/v1/prompt.txt`.
+Save the chosen prompt to `prompt_eval_runs/runs/run_NNN/v1/prompt.txt` (create parent dirs as needed).
 
 ---
 
@@ -115,15 +115,15 @@ Save the chosen prompt to `workflow/prompt_eval/runs/run_NNN/v1/prompt.txt`.
 
 Run:
 ```bash
-cd workflow/prompt_eval && uv run python run.py generate \
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval generate \
   --task "{task_description}" \
   --inputs '{inputs_spec_json}' \
   --num-cases {cases} \
   --model {model} \
-  --out-dir runs/run_NNN
+  --run-id run_NNN
 ```
 
-Read `runs/run_NNN/dataset.json`. Show the user a brief summary of each generated test case (scenario + key inputs).
+Read `prompt_eval_runs/runs/run_NNN/dataset.json`. Show the user a brief summary of each generated test case (scenario + key inputs).
 
 ---
 
@@ -131,22 +131,22 @@ Read `runs/run_NNN/dataset.json`. Show the user a brief summary of each generate
 
 Run:
 ```bash
-cd workflow/prompt_eval && uv run python run.py evaluate \
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval evaluate \
   --version v{n} \
   --model {model} \
   --judge-model {judge_model} \
-  --out-dir runs/run_NNN
+  --run-id run_NNN
 ```
 
-Stream output. When complete, the script auto-regenerates the docs site and starts `mkdocs serve` if it's not already running.
+Stream output. When complete, the script auto-regenerates the docs site and starts `mkdocs serve` if it's not already running. The first invocation per project also bootstraps `prompt_eval_runs/docs-site/` from the bundled template.
 
-If the first import fails because deepeval isn't installed, run `uv sync` first.
+(uvx builds the package from the skill dir on first run and caches it; subsequent invocations reuse the cached env.)
 
 ---
 
 ## Step 4 — Show results & analyze failures
 
-Read `runs/run_NNN/v{n}/output.json`. Print a Markdown summary table:
+Read `prompt_eval_runs/runs/run_NNN/v{n}/output.json`. Print a Markdown summary table:
 
 | Scenario | Score | Reasoning |
 |---|---|---|
@@ -178,7 +178,7 @@ Offer:
 
 If a/b/c chosen:
 - Compute the next version label `v{n+1}`.
-- Save the new prompt to `workflow/prompt_eval/runs/run_NNN/v{n+1}/prompt.txt`.
+- Save the new prompt to `prompt_eval_runs/runs/run_NNN/v{n+1}/prompt.txt` (create parent dirs as needed).
 - Run Step 3 with `--version v{n+1}`.
 - Run Step 4.
 - Loop back to Step 5.
