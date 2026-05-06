@@ -52,14 +52,16 @@ def test_update_mkdocs_nav_adds_run_section(tmp_path):
 
     update_mkdocs_nav(
         cfg,
+        prompt_name="default",
         run_id="run_001",
         version_labels=["v1", "v2"],
     )
 
     parsed = yaml.safe_load(cfg.read_text())
     nav = parsed["nav"]
-    runs_entry = next(item for item in nav if "Runs" in item)
-    run_001 = next(r for r in runs_entry["Runs"] if "run_001" in r)
+    prompts_entry = next(item for item in nav if "Prompts" in item)
+    default = next(p for p in prompts_entry["Prompts"] if "default" in p)["default"]
+    run_001 = next(r for r in default if "run_001" in r)
     pages = run_001["run_001"]
     titles = [list(p.keys())[0] for p in pages]
     assert "Summary" in titles

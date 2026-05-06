@@ -33,10 +33,10 @@ def test_regenerate_for_run_writes_all_pages(tmp_path):
     }))
 
     # Act
-    regenerate_for_run(run_dir=run_dir, docs_root=docs_root, mkdocs_yml=cfg)
+    regenerate_for_run(run_dir=run_dir, docs_root=docs_root, mkdocs_yml=cfg, prompt_name="default")
 
     # Assert pages exist
-    out = docs_root / "runs" / "run_001"
+    out = docs_root / "prompts" / "default" / "runs" / "run_001"
     assert (out / "index.md").exists()
     assert (out / "comparison.md").exists()
     assert (out / "v1.md").exists()
@@ -44,8 +44,9 @@ def test_regenerate_for_run_writes_all_pages(tmp_path):
 
     # mkdocs.yml updated
     nav = yaml.safe_load(cfg.read_text())["nav"]
-    runs = next(item["Runs"] for item in nav if "Runs" in item)
-    assert any("run_001" in entry for entry in runs)
+    prompts_entry = next(item["Prompts"] for item in nav if "Prompts" in item)
+    default = next(item["default"] for item in prompts_entry if "default" in item)
+    assert any("run_001" in entry for entry in default)
 
 
 def test_regenerate_for_run_skips_comparison_with_one_version(tmp_path):
@@ -67,9 +68,9 @@ def test_regenerate_for_run_skips_comparison_with_one_version(tmp_path):
     cfg = tmp_path / "docs-site" / "mkdocs.yml"
     cfg.write_text(yaml.safe_dump({"site_name": "x", "nav": []}))
 
-    regenerate_for_run(run_dir=run_dir, docs_root=docs_root, mkdocs_yml=cfg)
+    regenerate_for_run(run_dir=run_dir, docs_root=docs_root, mkdocs_yml=cfg, prompt_name="default")
 
-    out = docs_root / "runs" / "run_002"
+    out = docs_root / "prompts" / "default" / "runs" / "run_002"
     assert (out / "index.md").exists()
     assert (out / "v1.md").exists()
     assert not (out / "comparison.md").exists()

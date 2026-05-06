@@ -150,29 +150,44 @@ def _indent(text: str, n: int = 4) -> str:
 
 def update_mkdocs_nav(
     config_path: Path,
+    prompt_name: str,
     run_id: str,
     version_labels: list,
 ) -> None:
-    """Insert/replace the run's section under nav.Runs in mkdocs.yml."""
+    """Insert/replace one run's section under nav.Prompts.<prompt_name>.<run_id>."""
     config_path = Path(config_path)
     cfg = yaml.safe_load(config_path.read_text())
     nav = cfg.setdefault("nav", [])
 
-    # Find or create the Runs entry
-    runs_entry = next((item for item in nav if isinstance(item, dict) and "Runs" in item), None)
-    if runs_entry is None:
-        runs_entry = {"Runs": []}
-        nav.append(runs_entry)
+    # Find or create the top-level Prompts entry
+    prompts_entry = next(
+        (item for item in nav if isinstance(item, dict) and "Prompts" in item),
+        None,
+    )
+    if prompts_entry is None:
+        prompts_entry = {"Prompts": []}
+        nav.append(prompts_entry)
 
-    # Build the run pages list
-    pages = [{"Summary": f"runs/{run_id}/index.md"}]
+    # Find or create the per-prompt entry within Prompts
+    prompts_list = prompts_entry["Prompts"]
+    prompt_entry = next(
+        (item for item in prompts_list if isinstance(item, dict) and prompt_name in item),
+        None,
+    )
+    if prompt_entry is None:
+        prompt_entry = {prompt_name: []}
+        prompts_list.append(prompt_entry)
+
+    # Build this run's page list
+    base = f"prompts/{prompt_name}/runs/{run_id}"
+    pages = [{"Summary": f"{base}/index.md"}]
     if len(version_labels) >= 2:
-        pages.append({"Comparison": f"runs/{run_id}/comparison.md"})
+        pages.append({"Comparison": f"{base}/comparison.md"})
     for label in version_labels:
-        pages.append({label: f"runs/{run_id}/{label}.md"})
+        pages.append({label: f"{base}/{label}.md"})
 
-    # Replace or append this run's entry
-    runs_list = runs_entry["Runs"]
+    # Replace or append this run's entry within the per-prompt list
+    runs_list = prompt_entry[prompt_name]
     for i, item in enumerate(runs_list):
         if isinstance(item, dict) and run_id in item:
             runs_list[i] = {run_id: pages}
@@ -205,8 +220,12 @@ def render_summary_page(run_id: str, metadata: dict, versions: list) -> str:
 """
 
 
-def regenerate_for_run(run_dir, docs_root, mkdocs_yml) -> None:
-    """Read run_dir/{metadata,outputs}, write Markdown to docs_root, update nav."""
+def regenerate_for_run(run_dir, docs_root, mkdocs_yml, prompt_name: str) -> None:
+    """Read run_dir/{metadata,outputs}, write Markdown to docs_root, update nav.
+
+    Pages go to ``<docs_root>/prompts/<prompt_name>/runs/<run_id>/``. Nav is
+    nested under ``Prompts > <prompt_name> > <run_id>``.
+    """
     from pathlib import Path as _Path
     run_dir = _Path(run_dir)
     docs_root = _Path(docs_root)
@@ -221,7 +240,7 @@ def regenerate_for_run(run_dir, docs_root, mkdocs_yml) -> None:
         results = json.loads((run_dir / label / "output.json").read_text())
         versions.append({"label": label, "prompt": prompt_text, "results": results})
 
-    out_dir = docs_root / "runs" / run_id
+    out_dir = docs_root / "prompts" / prompt_name / "runs" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Summary
@@ -238,4 +257,4 @@ def regenerate_for_run(run_dir, docs_root, mkdocs_yml) -> None:
             render_comparison_page(run_id, versions)
         )
 
-    update_mkdocs_nav(mkdocs_yml, run_id, version_labels)
+    update_mkdocs_nav(mkdocs_yml, prompt_name, run_id, version_labels)
