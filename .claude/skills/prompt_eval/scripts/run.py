@@ -340,6 +340,7 @@ def _build_parser() -> argparse.ArgumentParser:
     s.add_argument("--run-id", required=True, help="e.g. run_001")
     s.add_argument("--version", required=True, help="e.g. v1, v2")
     s.add_argument("--json", action="store_true", help="Emit structured JSON")
+    s.add_argument("--prompt", required=True, help="prompt name, e.g. summarizer")
     return p
 
 
@@ -377,6 +378,7 @@ def main(argv: list | None = None) -> int:
         )
         return 0
     if args.cmd == "show":
+        runs_dir = _resolve_runs_dir(args.prompt)
         out_dir = runs_dir / args.run_id
         _do_show(out_dir, args.version, json_output=args.json)
         return 0

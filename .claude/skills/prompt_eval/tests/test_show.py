@@ -12,7 +12,7 @@ def _write_output(out_dir, version, results):
 
 
 def test_show_pretty_prints_per_case_block(tmp_path, capsys):
-    out_dir = tmp_path / "run_001"
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_001"
     _write_output(out_dir, "v1", [
         {
             "test_case": {"scenario": "Vegan endurance runner"},
@@ -36,7 +36,7 @@ def test_show_pretty_prints_per_case_block(tmp_path, capsys):
 
 
 def test_show_json_emits_structured_summary(tmp_path, capsys):
-    out_dir = tmp_path / "run_002"
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_002"
     _write_output(out_dir, "v2", [
         {"test_case": {"scenario": "A"}, "output": "ok", "score": 9, "reasoning": "good"},
         {"test_case": {"scenario": "B"}, "output": "bad", "score": 4, "reasoning": "weak"},
@@ -62,7 +62,7 @@ def test_show_normalizes_scenario_when_model_returns_dict(tmp_path, capsys):
     """Models occasionally return scenario as {'title': ..., 'description': ...}
     instead of a plain string. Show must normalize so downstream code never
     has to defend against the shape."""
-    out_dir = tmp_path / "run_003"
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_003"
     _write_output(out_dir, "v1", [
         {
             "test_case": {"scenario": {"title": "Marathoner", "description": "..."}},
@@ -79,8 +79,8 @@ def test_show_normalizes_scenario_when_model_returns_dict(tmp_path, capsys):
 
 
 def test_show_errors_clearly_when_output_file_missing(tmp_path):
-    out_dir = tmp_path / "run_404"
-    out_dir.mkdir()  # run dir exists, but no version subdir
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_404"
+    out_dir.mkdir(parents=True)  # run dir exists, but no version subdir
 
     with pytest.raises(SystemExit) as exc:
         _do_show(out_dir, "v1", json_output=False)
