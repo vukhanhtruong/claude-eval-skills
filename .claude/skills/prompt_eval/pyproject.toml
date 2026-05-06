@@ -15,14 +15,25 @@ dependencies = [
 prompt-eval = "prompt_eval.run:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
 
-[tool.hatch.build.targets.wheel]
+# Source folder is `scripts/` (per skill-creator convention) but the import name
+# is `prompt_eval`. setuptools' package-dir mapping bridges the two — this
+# requires the strict editable mode (configured below) so the import rename
+# survives `pip install -e .` / `uv sync`.
+[tool.setuptools]
 packages = ["prompt_eval"]
+package-dir = {"prompt_eval" = "scripts"}
+
+[tool.setuptools.package-data]
+prompt_eval = ["docs-site-template/**/*"]
 
 [dependency-groups]
 dev = ["pytest>=8.0"]
+
+[tool.uv]
+config-settings = { editable_mode = "strict" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

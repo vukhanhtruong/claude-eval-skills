@@ -3,4 +3,6 @@ __pycache__/
 .pytest_cache/
 .deepeval/
 .venv/
+build/
+*.egg-info/
 mkdocs.log
