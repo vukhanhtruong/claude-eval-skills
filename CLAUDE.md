@@ -57,7 +57,7 @@ The skill invokes Python via `uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval ...`.
 - **Model map is fixed** (`evaluator.py`): `haiku → claude-haiku-4-5`, `sonnet → claude-sonnet-4-6`, `opus → claude-opus-4-7`. Default test model is `haiku`; default judge is `sonnet`.
 - **Concurrency = 3** (`ThreadPoolExecutor`) and **default `--num-cases` = 3**. Rate-limit-safe defaults from the source notebook; don't bump them without reason.
 - **Auto-start `mkdocs serve` in the background** after the first `evaluate` per session, and print the URL. Don't block the CLI on it.
-- **Artifact dir resolution** (`run.py` → `_resolve_artifact_root`): `$PROMPT_EVAL_PROJECT_DIR` > `$CLAUDE_PROJECT_DIR` > `os.getcwd()`. Always preserve this priority.
+- **Artifact dir resolution** (`run.py` → `_resolve_artifact_root`): `$PROMPT_EVAL_PROJECT_DIR` > `os.getcwd()` (when `prompt_eval_runs/` exists) > `$CLAUDE_PROJECT_DIR` > error. cwd is intentionally checked before `CLAUDE_PROJECT_DIR` to prevent stale env-var poisoning from prior sessions. Always preserve this priority.
 - **`docs-site-template/` lives inside `scripts/`** so `Path(__file__).parent / "docs-site-template"` works in both editable-install (dev, via setuptools symlinks) and built-wheel (uvx) modes. Don't move it out.
 
 ## Commands
