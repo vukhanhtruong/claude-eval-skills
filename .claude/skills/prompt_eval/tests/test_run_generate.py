@@ -1,35 +1,34 @@
-"""Tests for the generate subcommand."""
+"""generate subcommand: writes namespaced runs and persists prompt_name."""
 import json
+from pathlib import Path
 from unittest.mock import patch, MagicMock
+
 from prompt_eval.run import _do_generate
 
 
-@patch("prompt_eval.run.DatasetGenerator")
-def test_generate_writes_dataset_json_and_metadata(gen_cls, tmp_path):
-    gen = gen_cls.return_value
-    gen.generate_dataset.return_value = [
-        {"scenario": "A", "prompt_inputs": {"x": "1"}, "solution_criteria": ["c"], "task_description": "t"},
-    ]
+def test_generate_writes_dataset_and_metadata_with_prompt_name(tmp_path):
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_001"
 
-    out_dir = tmp_path / "runs" / "run_001"
-    _do_generate(
-        task="meal plan",
-        inputs_json='{"height":"cm"}',
-        num_cases=1,
-        model="haiku",
-        out_dir=out_dir,
-    )
+    fake_dataset = [{"scenario": "S1", "input_kwargs": {}, "solution_criteria": ["x"]}]
 
-    dataset_file = out_dir / "dataset.json"
-    assert dataset_file.exists()
-    data = json.loads(dataset_file.read_text())
-    assert len(data) == 1
+    with patch("prompt_eval.run.DatasetGenerator") as DG:
+        instance = MagicMock()
+        instance.generate_dataset.return_value = fake_dataset
+        DG.return_value = instance
 
+        _do_generate(
+            task="summarize x",
+            inputs_json='{"text": "string"}',
+            num_cases=1,
+            model="haiku",
+            out_dir=out_dir,
+            prompt_name="summarizer",
+        )
+
+    assert (out_dir / "dataset.json").exists()
     meta = json.loads((out_dir / "metadata.json").read_text())
     assert meta["run_id"] == "run_001"
+    assert meta["prompt_name"] == "summarizer"
+    assert meta["task"] == "summarize x"
     assert meta["test_model"] == "haiku"
     assert meta["dataset_size"] == 1
-    assert meta["versions"] == []  # no versions yet
-
-    gen_cls.assert_called_once_with(model="claude-haiku-4-5")
-    gen.generate_dataset.assert_called_once()

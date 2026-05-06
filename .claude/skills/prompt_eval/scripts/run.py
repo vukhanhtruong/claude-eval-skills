@@ -164,7 +164,10 @@ def list_runs(runs_dir: Path) -> None:
         print(f"  {run_path.name}  {size} cases  {version_str}  avg {avg}")
 
 
-def _do_generate(task: str, inputs_json: str, num_cases: int, model: str, out_dir: Path) -> None:
+def _do_generate(
+    task: str, inputs_json: str, num_cases: int, model: str,
+    out_dir: Path, prompt_name: str,
+) -> None:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -185,6 +188,7 @@ def _do_generate(task: str, inputs_json: str, num_cases: int, model: str, out_di
     meta_file = out_dir / "metadata.json"
     metadata = {
         "run_id": out_dir.name,
+        "prompt_name": prompt_name,
         "task": task,
         "inputs_spec": inputs_spec,
         "test_model": model,
@@ -320,6 +324,7 @@ def _build_parser() -> argparse.ArgumentParser:
     g.add_argument("--num-cases", type=int, default=3)
     g.add_argument("--model", default="haiku", choices=["haiku", "sonnet", "opus"])
     g.add_argument("--run-id", required=True, help="e.g. run_001")
+    g.add_argument("--prompt", required=True, help="prompt name, e.g. summarizer")
 
     e = sub.add_parser("evaluate", help="Run + grade a prompt version")
     e.add_argument("--version", required=True, help="e.g. v1, v2")
@@ -344,6 +349,7 @@ def main(argv: list | None = None) -> int:
         list_runs(runs_dir)
         return 0
     if args.cmd == "generate":
+        runs_dir = _resolve_runs_dir(args.prompt)
         out_dir = runs_dir / args.run_id
         _do_generate(
             task=args.task,
@@ -351,6 +357,7 @@ def main(argv: list | None = None) -> int:
             num_cases=args.num_cases,
             model=args.model,
             out_dir=out_dir,
+            prompt_name=args.prompt,
         )
         return 0
     if args.cmd == "evaluate":
