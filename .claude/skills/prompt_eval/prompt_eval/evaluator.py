@@ -45,6 +45,16 @@ def _chat(client, model, messages, system=None, temperature=1.0, stop_sequences=
     return client.messages.create(**params).content[0].text
 
 
+def _strip_code_fence(text: str) -> str:
+    """Tolerate models that wrap JSON in ```json ... ``` even when told not to."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+    if text.endswith("```"):
+        text = text.rsplit("```", 1)[0]
+    return text.strip()
+
+
 class DatasetGenerator:
     """Generate diverse test cases for a prompt-evaluation task using Claude."""
 
@@ -81,19 +91,16 @@ class DatasetGenerator:
             - Solvable with no more than 400 tokens
 
             Generate exactly {num_cases} ideas.
+
+            Respond with ONLY the JSON array. No prose, no markdown fences.
         """)
-        messages = [
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": "```json"},
-        ]
         text = _chat(
             self.client,
             self.model,
-            messages,
+            [{"role": "user", "content": prompt}],
             system="You are a test scenario designer.",
-            stop_sequences=["```"],
         )
-        return json.loads(text)
+        return json.loads(_strip_code_fence(text))
 
     def generate_test_case(self, task_description, idea, prompt_inputs_spec):
         allowed_keys = ", ".join(f'"{k}"' for k in prompt_inputs_spec.keys())
@@ -130,20 +137,17 @@ class DatasetGenerator:
             - Include all required keys
             - Solution criteria: 1-4 concise items, tied to the core task
             - Solvable with no more than 400 tokens
+
+            Respond with ONLY the JSON object. No prose, no markdown fences.
         """)
-        messages = [
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": "```json"},
-        ]
         text = _chat(
             self.client,
             self.model,
-            messages,
+            [{"role": "user", "content": prompt}],
             system="You are a test case creator.",
             temperature=0.7,
-            stop_sequences=["```"],
         )
-        case = json.loads(text)
+        case = json.loads(_strip_code_fence(text))
         case["task_description"] = task_description
         case["scenario"] = idea
         return case

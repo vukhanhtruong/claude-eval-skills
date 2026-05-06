@@ -1,0 +1,13 @@
+{
+  "run_id": "run_001",
+  "task": "Aggregate a batch of AI-related posts (model releases, research, industry news) from Hacker News and Reddit into a markdown bulleted list of the top 5 stories, written as a Mattermost message for a software team.",
+  "inputs_spec": {
+    "posts": "a JSON array of objects with fields: title (string), url (string), source (\"hackernews\"|\"reddit\"), subreddit (string, only for reddit), score (int), num_comments (int), body_excerpt (string or null)"
+  },
+  "test_model": "haiku",
+  "judge_model": null,
+  "dataset_size": 0,
+  "versions": [],
+  "version_data": {},
+  "latest_avg_score": null
+}
