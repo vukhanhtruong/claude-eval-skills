@@ -2,80 +2,85 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Repository status (read this first)
+## What this repo is
 
-This repo is **pre-implementation**. As of 2026-05-05 there is no source code, no `pyproject.toml`, and no git history — only a design doc and an implementation plan. The codebase referenced throughout the planning docs (`workflow/prompt_eval/...`, `.claude/skills/prompt_eval/SKILL.md`, etc.) does **not exist yet**. Treat the docs as intent, not as documentation of working code.
+A portable Claude Code skill: `/prompt_eval`. The skill helps users build, test, and iteratively improve a Claude prompt with grounded coaching (Anthropic best practices) and empirical scoring (DeepEval with Claude as judge).
 
-The two source-of-truth documents are:
+The entire skill lives under `.claude/skills/prompt_eval/`. Everything else in the repo is documentation or git metadata.
 
-- `docs/superpowers/specs/2026-05-05-prompt-eval-skill-design.md` — design rationale, decision table, directory layout
-- `docs/superpowers/plans/2026-05-05-prompt-eval-skill.md` — 17-task step-by-step build plan with full code blocks
-
-When implementing, use the plan, not the spec, as the build instructions; the spec is the "why" and resolves ambiguity.
-
-## What is being built
-
-A Claude Code slash command (`/prompt_eval`) that turns prompt iteration into a measurable loop:
-
-1. Coaches the user through 6 phases (task / inputs / output / role / examples / failure modes) using verbatim Anthropic-best-practice prompts.
-2. Generates a synthetic eval dataset with Claude.
-3. Scores prompt outputs with DeepEval's per-case `GEval` metric, using Claude as judge (no OpenAI dependency).
-4. Persists every run/version under `workflow/prompt_eval/runs/run_NNN/` and projects them into a MkDocs Material site.
-5. Supports `--resume run_NNN` to add a new version against the original dataset + judge for fair A/B comparison.
-
-The skill is a thin SKILL.md orchestrator that shells out to a Python CLI; nearly all logic lives in Python.
-
-## Planned architecture
+## Architecture
 
 ```
-.claude/skills/prompt_eval/SKILL.md       # slash-command + step-by-step coaching script
-workflow/prompt_eval/
-  anthropic_llm.py                        # AnthropicLLM(DeepEvalBaseLLM) — Claude as judge
-  evaluator.py                            # MODEL_MAP, render_prompt, DatasetGenerator, Evaluator
-  docs_generator.py                       # runs/ → Markdown + mkdocs.yml nav updates
-  run.py                                  # argparse CLI: generate | evaluate | list-runs
-  runs/run_NNN/                           # raw eval data (source of truth)
-    dataset.json                          # locked at v1, reused across versions
-    metadata.json                         # prompts, scores, models, transitions
-    v{n}/{prompt.txt, output.json}
-  docs-site/                              # projected view; regenerated, not edited by hand
-    mkdocs.yml
-    docs/{index.md, runs/run_NNN/...}
-  tests/                                  # pytest, alongside source
+.claude/skills/prompt_eval/
+├── SKILL.md                       # slash-command + step-by-step coaching script
+├── pyproject.toml                 # package "prompt-eval", entry point prompt-eval = prompt_eval.run:main
+├── uv.lock
+├── .gitignore
+├── prompt_eval/                   # the Python package (importable as `prompt_eval`)
+│   ├── __init__.py
+│   ├── anthropic_llm.py           # AnthropicLLM(DeepEvalBaseLLM) — Claude as judge
+│   ├── evaluator.py               # MODEL_MAP, render_prompt, DatasetGenerator, Evaluator
+│   ├── docs_generator.py          # runs/ → Markdown + mkdocs.yml nav updates
+│   ├── run.py                     # argparse CLI: list-runs | generate | evaluate
+│   └── docs-site-template/        # bundled template — copied to artifact dir on first evaluate
+└── tests/                         # pytest, run from inside the skill dir
 ```
 
-Key invariants worth preserving when implementing:
+Note: the original plan called the source folder `scripts/`, but hatchling's editable install rejects prefix-remapping (`scripts/` → `prompt_eval`). The folder is named `prompt_eval/` directly, which is the Python package name and matches the skill's import path. Don't rename it back.
 
-- **`runs/` is the source of truth; `docs-site/docs/` is regenerated.** Never hand-edit pages under `docs-site/docs/runs/`. `docs_generator.regenerate_for_run()` rewrites them.
+Artifacts (per user project):
+
+```
+<project>/prompt_eval_runs/
+├── runs/run_NNN/                  # raw eval data (source of truth)
+│   ├── dataset.json               # locked at v1, reused across versions
+│   ├── metadata.json              # prompts, scores, models, transitions
+│   └── v{n}/{prompt.txt, output.json}
+└── docs-site/                     # projected view; regenerated from runs/, not edited by hand
+    ├── mkdocs.yml
+    ├── docs/{index.md, runs/run_NNN/...}
+    └── mkdocs.log
+```
+
+The skill invokes Python via `uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval ...`. uvx builds the package from the skill dir in an isolated env and runs the entry point. First invocation takes ~30-90s; subsequent calls are sub-second from cache.
+
+## Invariants (preserve when changing the skill)
+
+- **`prompt_eval_runs/runs/` is the source of truth; `docs-site/docs/` is regenerated.** Never hand-edit pages under `docs-site/docs/runs/`. `docs_generator.regenerate_for_run()` rewrites them.
 - **Dataset is locked at v1 of a run.** Resuming a run must not regenerate `dataset.json` — that would invalidate cross-version score comparisons.
-- **One `GEval` metric per test case**, built from that case's `solution_criteria`. A single shared metric loses specificity (this is an explicit decision in the spec, not an oversight).
-- **Telemetry must be off.** Set `os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "1"` at module import time in `evaluator.py` — before any `deepeval` import does network I/O.
+- **One `GEval` metric per test case**, built from that case's `solution_criteria`. A single shared metric loses specificity (deliberate decision in the spec).
+- **Telemetry must be off.** `os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "1"` is set at module import time in `evaluator.py` — before any `deepeval` import does network I/O.
 - **Model map is fixed** (`evaluator.py`): `haiku → claude-haiku-4-5`, `sonnet → claude-sonnet-4-6`, `opus → claude-opus-4-7`. Default test model is `haiku`; default judge is `sonnet`.
-- **Concurrency = 3** (`ThreadPoolExecutor`) and **default `--cases` = 3**. These are rate-limit-safe defaults from the source notebook; don't bump them without reason.
+- **Concurrency = 3** (`ThreadPoolExecutor`) and **default `--num-cases` = 3**. Rate-limit-safe defaults from the source notebook; don't bump them without reason.
 - **Auto-start `mkdocs serve` in the background** after the first `evaluate` per session, and print the URL. Don't block the CLI on it.
+- **Artifact dir resolution** (`run.py` → `_resolve_artifact_root`): `$PROMPT_EVAL_PROJECT_DIR` > `$CLAUDE_PROJECT_DIR` > `os.getcwd()`. Always preserve this priority.
+- **`docs-site-template/` lives inside `prompt_eval/`** so `Path(__file__).parent / "docs-site-template"` works in both editable-install (dev) and built-wheel (uvx) modes. Don't move it out.
 
-## Commands (once implemented)
+## Commands
 
-These don't work yet — they will after Task 1 (`uv sync`) of the plan.
+From inside the skill dir (development):
 
 ```bash
-# Install deps (Python 3.12, uv-managed)
-uv sync
+cd .claude/skills/prompt_eval
+uv sync                                                 # install deps + editable install
+uv run pytest                                           # 34 unit tests, e2e excluded by default
+uv run pytest -m e2e                                    # run the API-hitting e2e test
+uv run pytest tests/test_evaluator_grade.py             # single test file
+```
 
-# Run the CLI directly
-cd workflow/prompt_eval
-uv run python run.py list-runs
-uv run python run.py generate --task "..." --inputs '...' --num-cases 3 --model haiku --out-dir runs/run_001
-uv run python run.py evaluate --version v1 --model haiku --judge-model sonnet --out-dir runs/run_001
+From a user project (skill-style invocation):
 
-# Tests
-cd workflow/prompt_eval && uv run pytest
-cd workflow/prompt_eval && uv run pytest tests/test_evaluator.py::test_grade_with_geval  # single test
+```bash
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-runs
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval generate --task "..." --inputs '...' --num-cases 3 --model haiku --run-id run_001
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval evaluate --version v1 --model haiku --judge-model sonnet --run-id run_001
+```
 
-# Docs site (auto-started by `evaluate`, but to run manually)
-cd workflow/prompt_eval/docs-site && uv run mkdocs serve
+When testing `uvx` invocations manually outside Claude Code, set `CLAUDE_PROJECT_DIR` (or `PROMPT_EVAL_PROJECT_DIR`) to the dir you want artifacts in — otherwise the skill will inherit whatever `CLAUDE_PROJECT_DIR` your shell already had set from another project.
 
-# Invoke the skill end-to-end
+Or invoke the skill end-to-end (Claude Code parses `$ARGUMENTS` and orchestrates the steps):
+
+```
 /prompt_eval                                    # fresh run
 /prompt_eval --list                             # list prior runs
 /prompt_eval --resume run_001                   # add v_{n+1} to existing run
@@ -84,13 +89,11 @@ cd workflow/prompt_eval/docs-site && uv run mkdocs serve
 
 ## Plugins enabled
 
-`.claude/settings.json` enables `superpowers` and `skill-creator`. The implementation plan explicitly calls out **`superpowers:subagent-driven-development`** (preferred) or **`superpowers:executing-plans`** as the sub-skill to drive task-by-task execution. The plan's `- [ ]` checkboxes are designed for those skills' progress tracking.
-
-`.claude/settings.local.json` allow-lists `WebFetch(domain:deepeval.com)` for looking up DeepEval API details during implementation.
+`.claude/settings.json` enables `superpowers` and `skill-creator`. The `superpowers:subagent-driven-development` and `superpowers:executing-plans` sub-skills can drive task-by-task execution of any plan in `docs/superpowers/plans/`.
 
 ## Working in this repo
 
-- **Don't invent file locations.** If something isn't on disk, it's a planning artifact. Check `ls workflow/prompt_eval/` before assuming a module exists.
-- **Follow the plan's task order.** Tasks 1–17 have explicit dependencies (e.g. `evaluator.py` constants land in Task 3 before `DatasetGenerator` in Task 4). Don't skip ahead — later tasks assume earlier scaffolding.
-- **The verbatim coaching prompts and the failure-pattern→remedy table in `SKILL.md` are not boilerplate.** They are the product. Copy them exactly from the spec/plan; rewording weakens the skill's grounding in named Anthropic techniques.
+- **Run tests from inside the skill dir.** `cd .claude/skills/prompt_eval && uv run pytest`. The repo root has no `pyproject.toml`.
+- **The verbatim coaching prompts and the failure-pattern→remedy table in `SKILL.md` are the product.** Copy them exactly from the design spec; rewording weakens the skill's grounding in named Anthropic techniques.
 - **Run isolation:** each `/prompt_eval` invocation = one new `run_NNN` directory; resume is opt-in via `--resume`. Don't fold versions across runs.
+- **Don't edit files under `prompt_eval_runs/docs-site/docs/runs/` directly** — they're regenerated from `runs/`. Edit the source data instead.
