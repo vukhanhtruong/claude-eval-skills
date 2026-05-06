@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -35,6 +36,32 @@ def _resolve_artifact_root() -> Path:
         or os.getcwd()
     )
     return Path(project_dir) / "prompt_eval_runs"
+
+
+_PROMPT_NAME_RE = re.compile(r"^[a-z0-9_-]+$")
+
+
+def _validate_prompt_name(name: str) -> None:
+    """Reject prompt names that aren't filesystem- and URL-safe.
+
+    Allowed: lowercase letters, digits, underscore, hyphen. 1-64 chars.
+    Restrictive on purpose so paths don't need escaping anywhere.
+    """
+    if not isinstance(name, str) or not (1 <= len(name) <= 64) or not _PROMPT_NAME_RE.match(name):
+        raise ValueError(
+            f"prompt name must match [a-z0-9_-]+ and be 1-64 chars; got {name!r}"
+        )
+
+
+def _resolve_prompts_dir() -> Path:
+    """Return ``<artifact_root>/prompts/`` (the parent of all prompt namespaces)."""
+    return _resolve_artifact_root() / "prompts"
+
+
+def _resolve_runs_dir(prompt_name: str) -> Path:
+    """Return ``<artifact_root>/prompts/<prompt_name>/runs/``. Validates name."""
+    _validate_prompt_name(prompt_name)
+    return _resolve_prompts_dir() / prompt_name / "runs"
 
 
 def _bootstrap_docs_site(target: Path) -> None:
