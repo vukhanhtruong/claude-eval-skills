@@ -28,14 +28,25 @@ def _resolve_artifact_root() -> Path:
     Priority for `<project_dir>`:
     1. ``$PROMPT_EVAL_PROJECT_DIR`` (explicit override)
     2. ``$CLAUDE_PROJECT_DIR`` (set by Claude Code on skill invocation)
-    3. current working directory
+    3. current working directory (must contain prompt_eval_runs/)
     """
-    project_dir = (
+    explicit_project = (
         os.environ.get("PROMPT_EVAL_PROJECT_DIR")
         or os.environ.get("CLAUDE_PROJECT_DIR")
-        or os.getcwd()
     )
-    return Path(project_dir) / "prompt_eval_runs"
+    if explicit_project:
+        return Path(explicit_project) / "prompt_eval_runs"
+
+    # No env var set; require prompt_eval_runs/ to exist in current directory
+    cwd = Path(os.getcwd())
+    artifact_root = cwd / "prompt_eval_runs"
+    if not artifact_root.exists():
+        raise FileNotFoundError(
+            f"prompt_eval_runs/ not found in current directory ({cwd}).\n"
+            f"Run this skill only in the project root where prompt_eval_runs/ exists, "
+            f"or set $PROMPT_EVAL_PROJECT_DIR to override."
+        )
+    return artifact_root
 
 
 _PROMPT_NAME_RE = re.compile(r"^[a-z0-9_-]+$")
