@@ -19,6 +19,22 @@ from prompt_eval.docs_generator import regenerate_for_run
 MKDOCS_PORT = 8000
 
 
+def _resolve_artifact_root() -> Path:
+    """Return `<project_dir>/prompt_eval_runs/`.
+
+    Priority for `<project_dir>`:
+    1. ``$PROMPT_EVAL_PROJECT_DIR`` (explicit override)
+    2. ``$CLAUDE_PROJECT_DIR`` (set by Claude Code on skill invocation)
+    3. current working directory
+    """
+    project_dir = (
+        os.environ.get("PROMPT_EVAL_PROJECT_DIR")
+        or os.environ.get("CLAUDE_PROJECT_DIR")
+        or os.getcwd()
+    )
+    return Path(project_dir) / "prompt_eval_runs"
+
+
 def _bootstrap_docs_site(target: Path) -> None:
     """Copy the bundled docs-site template to `target` if `target/mkdocs.yml` doesn't exist.
 
@@ -120,6 +136,7 @@ def _do_generate(task: str, inputs_json: str, num_cases: int, model: str, out_di
 def _do_evaluate(
     version: str, model: str, judge_model: str,
     out_dir: Path, extra_criteria: str | None,
+    docs_site_dir: Path | None = None,
 ) -> None:
     out_dir = Path(out_dir)
     meta_file = out_dir / "metadata.json"
@@ -162,22 +179,24 @@ def _do_evaluate(
     metadata["latest_avg_score"] = round(avg, 1)
     meta_file.write_text(json.dumps(metadata, indent=2))
 
-    # Regenerate docs site
-    here = Path(__file__).parent
+    # Regenerate docs site (bootstrap from template on first evaluate per project)
+    if docs_site_dir is None:
+        docs_site_dir = _resolve_artifact_root() / "docs-site"
+    _bootstrap_docs_site(docs_site_dir)
     regenerate_for_run(
         run_dir=out_dir,
-        docs_root=here / "docs-site" / "docs",
-        mkdocs_yml=here / "docs-site" / "mkdocs.yml",
+        docs_root=docs_site_dir / "docs",
+        mkdocs_yml=docs_site_dir / "mkdocs.yml",
     )
 
     # Auto-start mkdocs serve
-    start_mkdocs_if_idle(here / "docs-site")
+    start_mkdocs_if_idle(docs_site_dir)
 
     print(f"Evaluated {version}: average {avg:.1f}/10")
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="prompt_eval")
+    p = argparse.ArgumentParser(prog="prompt-eval")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("list-runs", help="List existing runs and exit")
@@ -187,39 +206,44 @@ def _build_parser() -> argparse.ArgumentParser:
     g.add_argument("--inputs", required=True, help="JSON dict of input specs")
     g.add_argument("--num-cases", type=int, default=3)
     g.add_argument("--model", default="haiku", choices=["haiku", "sonnet", "opus"])
-    g.add_argument("--out-dir", required=True)
+    g.add_argument("--run-id", required=True, help="e.g. run_001")
 
     e = sub.add_parser("evaluate", help="Run + grade a prompt version")
     e.add_argument("--version", required=True, help="e.g. v1, v2")
     e.add_argument("--model", default="haiku", choices=["haiku", "sonnet", "opus"])
     e.add_argument("--judge-model", default="sonnet", choices=["haiku", "sonnet", "opus"])
-    e.add_argument("--out-dir", required=True)
+    e.add_argument("--run-id", required=True, help="e.g. run_001")
     e.add_argument("--extra-criteria", default=None)
     return p
 
 
 def main(argv: list | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    here = Path(__file__).parent
+    artifact_root = _resolve_artifact_root()
+    runs_dir = artifact_root / "runs"
+
     if args.cmd == "list-runs":
-        list_runs(here / "runs")
+        list_runs(runs_dir)
         return 0
     if args.cmd == "generate":
+        out_dir = runs_dir / args.run_id
         _do_generate(
             task=args.task,
             inputs_json=args.inputs,
             num_cases=args.num_cases,
             model=args.model,
-            out_dir=Path(args.out_dir),
+            out_dir=out_dir,
         )
         return 0
     if args.cmd == "evaluate":
+        out_dir = runs_dir / args.run_id
         _do_evaluate(
             version=args.version,
             model=args.model,
             judge_model=args.judge_model,
-            out_dir=Path(args.out_dir),
+            out_dir=out_dir,
             extra_criteria=args.extra_criteria,
+            docs_site_dir=artifact_root / "docs-site",
         )
         return 0
     return 1

@@ -6,10 +6,12 @@ from prompt_eval.run import _do_evaluate
 
 @patch("prompt_eval.run.regenerate_for_run")
 @patch("prompt_eval.run.start_mkdocs_if_idle")
+@patch("prompt_eval.run._bootstrap_docs_site")
 @patch("prompt_eval.run.Evaluator")
 def test_evaluate_writes_outputs_and_updates_metadata(
-    eval_cls, start_mkdocs, regen, tmp_path
+    eval_cls, mock_bootstrap, start_mkdocs, regen, tmp_path, monkeypatch
 ):
+    monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
     # Set up out_dir with dataset + v1 prompt + initial metadata
     out_dir = tmp_path / "runs" / "run_001"
     (out_dir / "v1").mkdir(parents=True)
@@ -53,10 +55,12 @@ def test_evaluate_writes_outputs_and_updates_metadata(
 
 @patch("prompt_eval.run.regenerate_for_run")
 @patch("prompt_eval.run.start_mkdocs_if_idle")
+@patch("prompt_eval.run._bootstrap_docs_site")
 @patch("prompt_eval.run.Evaluator")
 def test_evaluate_warns_when_judge_model_changes(
-    eval_cls, start_mkdocs, regen, tmp_path, capsys
+    eval_cls, mock_bootstrap, start_mkdocs, regen, tmp_path, monkeypatch, capsys
 ):
+    monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
     out_dir = tmp_path / "runs" / "run_001"
     (out_dir / "v2").mkdir(parents=True)
     (out_dir / "dataset.json").write_text(json.dumps([
