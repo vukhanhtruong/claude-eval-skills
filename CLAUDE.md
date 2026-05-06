@@ -32,13 +32,15 @@ Artifacts (per user project):
 
 ```
 <project>/prompt_eval_runs/
-├── runs/run_NNN/                  # raw eval data (source of truth)
-│   ├── dataset.json               # locked at v1, reused across versions
-│   ├── metadata.json              # prompts, scores, models, transitions
-│   └── v{n}/{prompt.txt, output.json}
-└── docs-site/                     # projected view; regenerated from runs/, not edited by hand
+├── prompts/                              # one subdir per prompt namespace
+│   └── <prompt_name>/
+│       └── runs/run_NNN/                 # raw eval data (source of truth)
+│           ├── dataset.json              # locked at v1, reused across versions
+│           ├── metadata.json             # prompts, scores, models, transitions, prompt_name
+│           └── v{n}/{prompt.txt, output.json}
+└── docs-site/                            # projected view; regenerated from runs/, not edited by hand
     ├── mkdocs.yml
-    ├── docs/{index.md, runs/run_NNN/...}
+    ├── docs/{index.md, prompts/<prompt_name>/runs/run_NNN/...}
     └── mkdocs.log
 ```
 
@@ -46,7 +48,9 @@ The skill invokes Python via `uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval ...`.
 
 ## Invariants (preserve when changing the skill)
 
-- **`prompt_eval_runs/runs/` is the source of truth; `docs-site/docs/` is regenerated.** Never hand-edit pages under `docs-site/docs/runs/`. `docs_generator.regenerate_for_run()` rewrites them.
+- **`prompt_eval_runs/prompts/<name>/runs/` is the source of truth; `docs-site/docs/prompts/<name>/runs/` is regenerated.** Never hand-edit those pages. `docs_generator.regenerate_for_run()` rewrites them.
+- **Prompt namespace is required.** Every `generate`/`evaluate`/`show`/`list-runs` call must pass `--prompt <name>`. Names match `[a-z0-9_-]+`. Run IDs are scoped per prompt — `prompts/summarizer/runs/run_001` and `prompts/code_reviewer/runs/run_001` are independent.
+- **Legacy migration is one-shot.** On first invocation per project after upgrading, if `prompt_eval_runs/runs/` exists and `prompt_eval_runs/prompts/` does not, the CLI moves runs into `prompts/default/runs/` and rewrites the docs nav. Re-runs are no-ops.
 - **Dataset is locked at v1 of a run.** Resuming a run must not regenerate `dataset.json` — that would invalidate cross-version score comparisons.
 - **One `GEval` metric per test case**, built from that case's `solution_criteria`. A single shared metric loses specificity (deliberate decision in the spec).
 - **Telemetry must be off.** `os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "1"` is set at module import time in `evaluator.py` — before any `deepeval` import does network I/O.
@@ -71,10 +75,11 @@ uv run pytest tests/test_evaluator_grade.py             # single test file
 From a user project (skill-style invocation):
 
 ```bash
-uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-runs
-uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval generate --task "..." --inputs '...' --num-cases 3 --model haiku --run-id run_001
-uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval evaluate --version v1 --model haiku --judge-model sonnet --run-id run_001
-uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval show --run-id run_001 --version v1 --json     # structured scoreboard
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-prompts
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-runs --prompt summarizer
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval generate --prompt summarizer --task "..." --inputs '...' --num-cases 3 --model haiku --run-id run_001
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval evaluate --prompt summarizer --version v1 --model haiku --judge-model sonnet --run-id run_001
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval show --prompt summarizer --run-id run_001 --version v1 --json
 ```
 
 When testing `uvx` invocations manually outside Claude Code, set `CLAUDE_PROJECT_DIR` (or `PROMPT_EVAL_PROJECT_DIR`) to the dir you want artifacts in — otherwise the skill will inherit whatever `CLAUDE_PROJECT_DIR` your shell already had set from another project.
@@ -82,10 +87,11 @@ When testing `uvx` invocations manually outside Claude Code, set `CLAUDE_PROJECT
 Or invoke the skill end-to-end (Claude Code parses `$ARGUMENTS` and orchestrates the steps):
 
 ```
-/prompt_eval                                    # fresh run
-/prompt_eval --list                             # list prior runs
-/prompt_eval --resume run_001                   # add v_{n+1} to existing run
-/prompt_eval --model sonnet --judge-model opus --cases 5
+/prompt_eval --prompt summarizer                               # fresh run for summarizer
+/prompt_eval --list-prompts                                    # list all prompts
+/prompt_eval --prompt summarizer --list                        # list summarizer's runs
+/prompt_eval --prompt summarizer --resume run_001              # add v_{n+1} to existing run
+/prompt_eval --prompt code_reviewer --model sonnet --judge-model opus --cases 5
 ```
 
 ## Plugins enabled
@@ -98,3 +104,4 @@ Or invoke the skill end-to-end (Claude Code parses `$ARGUMENTS` and orchestrates
 - **The verbatim coaching prompts and the failure-pattern→remedy table in `SKILL.md` are the product.** Copy them exactly from the design spec; rewording weakens the skill's grounding in named Anthropic techniques.
 - **Run isolation:** each `/prompt_eval` invocation = one new `run_NNN` directory; resume is opt-in via `--resume`. Don't fold versions across runs.
 - **Don't edit files under `prompt_eval_runs/docs-site/docs/runs/` directly** — they're regenerated from `runs/`. Edit the source data instead.
+- **Working with multiple prompts:** keep them in distinct `--prompt` namespaces. Run IDs reset per prompt; both can have a `run_001`. The docs nav groups them under `Prompts > <name> > <run_id>`.
