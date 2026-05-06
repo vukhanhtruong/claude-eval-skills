@@ -3,9 +3,11 @@ import argparse
 import json
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 from statistics import mean
 
@@ -59,10 +61,34 @@ def _port_in_use(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
-def start_mkdocs_if_idle(docs_site_dir: Path) -> None:
-    if _port_in_use(MKDOCS_PORT):
-        print(f"mkdocs already serving at http://127.0.0.1:{MKDOCS_PORT}")
-        return
+def _kill_mkdocs() -> None:
+    """Send SIGTERM to any 'mkdocs serve' processes. Best-effort.
+
+    We use ``pgrep -f 'mkdocs serve'`` instead of port-based discovery so we
+    only kill our own processes, not whatever else might be on port 8000.
+    """
+    try:
+        out = subprocess.check_output(
+            ["pgrep", "-f", "mkdocs serve"],
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return  # nothing to kill, or no pgrep on PATH
+
+    for raw in out.decode().split():
+        try:
+            os.kill(int(raw), signal.SIGTERM)
+        except (ProcessLookupError, ValueError):
+            pass
+
+    # Wait up to 2s for the OS to release the port
+    for _ in range(20):
+        if not _port_in_use(MKDOCS_PORT):
+            return
+        time.sleep(0.1)
+
+
+def _start_mkdocs_background(docs_site_dir: Path) -> None:
     log_path = docs_site_dir / "mkdocs.log"
     subprocess.Popen(
         ["uv", "run", "mkdocs", "serve", "--dev-addr", f"127.0.0.1:{MKDOCS_PORT}"],
@@ -71,8 +97,20 @@ def start_mkdocs_if_idle(docs_site_dir: Path) -> None:
         stderr=subprocess.STDOUT,
         start_new_session=True,
     )
-    print(f"Started mkdocs serve in background → http://127.0.0.1:{MKDOCS_PORT}")
-    print(f"  log: {log_path}")
+    print(f"mkdocs serve at http://127.0.0.1:{MKDOCS_PORT}  (log: {log_path})")
+
+
+def restart_mkdocs(docs_site_dir: Path) -> None:
+    """Stop any running ``mkdocs serve`` and start a fresh one.
+
+    mkdocs serve's filesystem watcher silently misses files written to docs/
+    after the server starts (mkdocs 1.6 + Material on Linux), so we restart
+    it on every regeneration. Costs ~1 sec; cheap relative to the LLM calls
+    that surround it.
+    """
+    if _port_in_use(MKDOCS_PORT):
+        _kill_mkdocs()
+    _start_mkdocs_background(docs_site_dir)
 
 
 def list_runs(runs_dir: Path) -> None:
@@ -189,8 +227,8 @@ def _do_evaluate(
         mkdocs_yml=docs_site_dir / "mkdocs.yml",
     )
 
-    # Auto-start mkdocs serve
-    start_mkdocs_if_idle(docs_site_dir)
+    # mkdocs's file watcher silently misses post-startup writes; restart on each evaluate.
+    restart_mkdocs(docs_site_dir)
 
     print(f"Evaluated {version}: average {avg:.1f}/10")
 

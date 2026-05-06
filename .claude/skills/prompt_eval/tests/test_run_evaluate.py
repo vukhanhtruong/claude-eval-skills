@@ -5,7 +5,7 @@ from prompt_eval.run import _do_evaluate
 
 
 @patch("prompt_eval.run.regenerate_for_run")
-@patch("prompt_eval.run.start_mkdocs_if_idle")
+@patch("prompt_eval.run.restart_mkdocs")
 @patch("prompt_eval.run._bootstrap_docs_site")
 @patch("prompt_eval.run.Evaluator")
 def test_evaluate_writes_outputs_and_updates_metadata(
@@ -54,7 +54,7 @@ def test_evaluate_writes_outputs_and_updates_metadata(
 
 
 @patch("prompt_eval.run.regenerate_for_run")
-@patch("prompt_eval.run.start_mkdocs_if_idle")
+@patch("prompt_eval.run.restart_mkdocs")
 @patch("prompt_eval.run._bootstrap_docs_site")
 @patch("prompt_eval.run.Evaluator")
 def test_evaluate_warns_when_judge_model_changes(
