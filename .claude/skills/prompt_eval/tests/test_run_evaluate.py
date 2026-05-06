@@ -13,7 +13,7 @@ def test_evaluate_writes_outputs_and_updates_metadata(
 ):
     monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
     # Set up out_dir with dataset + v1 prompt + initial metadata
-    out_dir = tmp_path / "runs" / "run_001"
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_001"
     (out_dir / "v1").mkdir(parents=True)
     (out_dir / "dataset.json").write_text(json.dumps([
         {"scenario": "A", "prompt_inputs": {"x": "1"}, "solution_criteria": ["c"], "task_description": "t"},
@@ -21,6 +21,7 @@ def test_evaluate_writes_outputs_and_updates_metadata(
     (out_dir / "v1" / "prompt.txt").write_text("Test prompt {x}")
     (out_dir / "metadata.json").write_text(json.dumps({
         "run_id": "run_001",
+        "prompt_name": "summarizer",
         "test_model": "haiku",
         "judge_model": None,
         "dataset_size": 1,
@@ -36,6 +37,7 @@ def test_evaluate_writes_outputs_and_updates_metadata(
     _do_evaluate(
         version="v1", model="haiku", judge_model="sonnet",
         out_dir=out_dir, extra_criteria=None,
+        prompt_name="summarizer",
     )
 
     # output.json written
@@ -50,6 +52,7 @@ def test_evaluate_writes_outputs_and_updates_metadata(
 
     # docs regen + mkdocs autostart called
     regen.assert_called_once()
+    assert regen.call_args.kwargs["prompt_name"] == "summarizer"
     start_mkdocs.assert_called_once()
 
 
@@ -61,14 +64,15 @@ def test_evaluate_warns_when_judge_model_changes(
     eval_cls, mock_bootstrap, start_mkdocs, regen, tmp_path, monkeypatch, capsys
 ):
     monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
-    out_dir = tmp_path / "runs" / "run_001"
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_001"
     (out_dir / "v2").mkdir(parents=True)
     (out_dir / "dataset.json").write_text(json.dumps([
         {"scenario": "A", "prompt_inputs": {}, "solution_criteria": ["c"], "task_description": "t"},
     ]))
     (out_dir / "v2" / "prompt.txt").write_text("p")
     (out_dir / "metadata.json").write_text(json.dumps({
-        "run_id": "run_001", "test_model": "haiku", "judge_model": "sonnet",
+        "run_id": "run_001", "prompt_name": "summarizer",
+        "test_model": "haiku", "judge_model": "sonnet",
         "dataset_size": 1, "versions": ["v1"], "version_data": {"v1": {"avg_score": 5.0}},
     }))
     eval_cls.return_value.run_evaluation.return_value = [
@@ -78,6 +82,7 @@ def test_evaluate_warns_when_judge_model_changes(
     _do_evaluate(
         version="v2", model="haiku", judge_model="haiku",  # different from sonnet
         out_dir=out_dir, extra_criteria=None,
+        prompt_name="summarizer",
     )
     out = capsys.readouterr().out
     assert "originally evaluated with judge_model=sonnet" in out.lower() or "warning" in out.lower()

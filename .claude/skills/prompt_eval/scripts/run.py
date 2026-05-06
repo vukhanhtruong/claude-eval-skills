@@ -205,6 +205,7 @@ def _do_generate(
 def _do_evaluate(
     version: str, model: str, judge_model: str,
     out_dir: Path, extra_criteria: str | None,
+    prompt_name: str,
     docs_site_dir: Path | None = None,
 ) -> None:
     out_dir = Path(out_dir)
@@ -256,6 +257,7 @@ def _do_evaluate(
         run_dir=out_dir,
         docs_root=docs_site_dir / "docs",
         mkdocs_yml=docs_site_dir / "mkdocs.yml",
+        prompt_name=prompt_name,
     )
 
     # mkdocs's file watcher silently misses post-startup writes; restart on each evaluate.
@@ -332,6 +334,7 @@ def _build_parser() -> argparse.ArgumentParser:
     e.add_argument("--judge-model", default="sonnet", choices=["haiku", "sonnet", "opus"])
     e.add_argument("--run-id", required=True, help="e.g. run_001")
     e.add_argument("--extra-criteria", default=None)
+    e.add_argument("--prompt", required=True, help="prompt name, e.g. summarizer")
 
     s = sub.add_parser("show", help="Print scoreboard for one (run, version)")
     s.add_argument("--run-id", required=True, help="e.g. run_001")
@@ -361,6 +364,7 @@ def main(argv: list | None = None) -> int:
         )
         return 0
     if args.cmd == "evaluate":
+        runs_dir = _resolve_runs_dir(args.prompt)
         out_dir = runs_dir / args.run_id
         _do_evaluate(
             version=args.version,
@@ -368,6 +372,7 @@ def main(argv: list | None = None) -> int:
             judge_model=args.judge_model,
             out_dir=out_dir,
             extra_criteria=args.extra_criteria,
+            prompt_name=args.prompt,
             docs_site_dir=artifact_root / "docs-site",
         )
         return 0
