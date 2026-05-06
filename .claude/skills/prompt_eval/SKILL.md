@@ -26,22 +26,22 @@ Print output and stop.
 
 If `--list` (requires `--prompt`):
 ```bash
-uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-runs --prompt <name>
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-runs --prompt {prompt}
 ```
 Print output and stop.
 
-If `--prompt` is missing for any non-`--list-prompts` flow:
+If `--prompt` is missing for any flow other than `--list-prompts`:
 - First, run `prompt-eval list-prompts` to show what's already in this project.
 - Ask the user: "Which prompt are you iterating on? Pick one of the above, or type a new name (lowercase letters, digits, `_`, `-` only)."
 - Use the user's answer as `--prompt` for the rest of the flow.
 
-If `--resume <run_id>`:
-- Verify `prompt_eval_runs/prompts/<prompt>/runs/<run_id>/dataset.json` exists (relative to the user's project dir). If not, run `prompt-eval list-runs --prompt <prompt>` and ask the user to pick.
-- Read `prompt_eval_runs/prompts/<prompt>/runs/<run_id>/metadata.json`.
+If `--resume {run_id}`:
+- Verify `prompt_eval_runs/prompts/{prompt}/runs/{run_id}/dataset.json` exists (relative to the user's project dir). If not, run `prompt-eval list-runs --prompt {prompt}` and ask the user to pick.
+- Read `prompt_eval_runs/prompts/{prompt}/runs/{run_id}/metadata.json`.
 - Print: dataset size, prior versions, prior average scores, models used.
 - Skip Steps 1 & 2 below; jump to Step 5 with the latest version's data.
 
-Otherwise, start fresh from Step 1. Auto-increment run number: count existing `prompt_eval_runs/prompts/<prompt>/runs/run_*` directories (relative to the user's project dir); the new one is `run_{count+1:03d}`.
+Otherwise, start fresh from Step 1. Auto-increment run number: count existing `prompt_eval_runs/prompts/{prompt}/runs/run_*` directories (relative to the user's project dir); the new one is `run_{count+1:03d}`.
 
 ---
 
@@ -120,7 +120,7 @@ Show the assembled prompt. Annotate which Anthropic principle each section serve
 
 > "Use as-is, edit inline, paste your own, or restart wizard?"
 
-Save the chosen prompt to `prompt_eval_runs/prompts/<prompt>/runs/run_NNN/v1/prompt.txt` (create parent dirs as needed).
+Save the chosen prompt to `prompt_eval_runs/prompts/{prompt}/runs/run_NNN/v1/prompt.txt` (create parent dirs as needed).
 
 ---
 
