@@ -146,7 +146,12 @@ Stream output. When complete, the script auto-regenerates the docs site and star
 
 ## Step 4 — Show results & analyze failures
 
-Read `prompt_eval_runs/runs/run_NNN/v{n}/output.json`. Print a Markdown summary table:
+Get the structured scoreboard:
+```bash
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval show --run-id run_NNN --version v{n} --json
+```
+
+Parse the JSON output (it has `run_id`, `version`, `average_score`, `pass_rate`, and a `cases` list with `scenario`, `score`, `output_length`, `reasoning` per case). Render it back to the user as this Markdown table:
 
 | Scenario | Score | Reasoning |
 |---|---|---|

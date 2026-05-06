@@ -16,17 +16,17 @@ The entire skill lives under `.claude/skills/prompt_eval/`. Everything else in t
 ├── pyproject.toml                 # package "prompt-eval", entry point prompt-eval = prompt_eval.run:main
 ├── uv.lock
 ├── .gitignore
-├── prompt_eval/                   # the Python package (importable as `prompt_eval`)
+├── scripts/                       # source folder (skill-creator convention); imported as `prompt_eval`
 │   ├── __init__.py
 │   ├── anthropic_llm.py           # AnthropicLLM(DeepEvalBaseLLM) — Claude as judge
 │   ├── evaluator.py               # MODEL_MAP, render_prompt, DatasetGenerator, Evaluator
 │   ├── docs_generator.py          # runs/ → Markdown + mkdocs.yml nav updates
-│   ├── run.py                     # argparse CLI: list-runs | generate | evaluate
+│   ├── run.py                     # argparse CLI: list-runs | generate | evaluate | show
 │   └── docs-site-template/        # bundled template — copied to artifact dir on first evaluate
 └── tests/                         # pytest, run from inside the skill dir
 ```
 
-Note: the original plan called the source folder `scripts/`, but hatchling's editable install rejects prefix-remapping (`scripts/` → `prompt_eval`). The folder is named `prompt_eval/` directly, which is the Python package name and matches the skill's import path. Don't rename it back.
+Note: the source folder is `scripts/` on disk but importable as `prompt_eval` — `pyproject.toml` uses setuptools' `package-dir = {"prompt_eval" = "scripts"}` mapping plus uv's `editable_mode = "strict"` so the rename survives editable installs (setuptools materializes the package layout via per-file symlinks under `build/`). Hatchling can't do this in editable mode, which is why the build backend is setuptools.
 
 Artifacts (per user project):
 
@@ -54,7 +54,7 @@ The skill invokes Python via `uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval ...`.
 - **Concurrency = 3** (`ThreadPoolExecutor`) and **default `--num-cases` = 3**. Rate-limit-safe defaults from the source notebook; don't bump them without reason.
 - **Auto-start `mkdocs serve` in the background** after the first `evaluate` per session, and print the URL. Don't block the CLI on it.
 - **Artifact dir resolution** (`run.py` → `_resolve_artifact_root`): `$PROMPT_EVAL_PROJECT_DIR` > `$CLAUDE_PROJECT_DIR` > `os.getcwd()`. Always preserve this priority.
-- **`docs-site-template/` lives inside `prompt_eval/`** so `Path(__file__).parent / "docs-site-template"` works in both editable-install (dev) and built-wheel (uvx) modes. Don't move it out.
+- **`docs-site-template/` lives inside `scripts/`** so `Path(__file__).parent / "docs-site-template"` works in both editable-install (dev, via setuptools symlinks) and built-wheel (uvx) modes. Don't move it out.
 
 ## Commands
 
@@ -63,7 +63,7 @@ From inside the skill dir (development):
 ```bash
 cd .claude/skills/prompt_eval
 uv sync                                                 # install deps + editable install
-uv run pytest                                           # 34 unit tests, e2e excluded by default
+uv run pytest                                           # 42 unit tests, e2e excluded by default
 uv run pytest -m e2e                                    # run the API-hitting e2e test
 uv run pytest tests/test_evaluator_grade.py             # single test file
 ```
@@ -74,6 +74,7 @@ From a user project (skill-style invocation):
 uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-runs
 uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval generate --task "..." --inputs '...' --num-cases 3 --model haiku --run-id run_001
 uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval evaluate --version v1 --model haiku --judge-model sonnet --run-id run_001
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval show --run-id run_001 --version v1 --json     # structured scoreboard
 ```
 
 When testing `uvx` invocations manually outside Claude Code, set `CLAUDE_PROJECT_DIR` (or `PROMPT_EVAL_PROJECT_DIR`) to the dir you want artifacts in — otherwise the skill will inherit whatever `CLAUDE_PROJECT_DIR` your shell already had set from another project.

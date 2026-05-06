@@ -195,6 +195,54 @@ def _do_evaluate(
     print(f"Evaluated {version}: average {avg:.1f}/10")
 
 
+def _do_show(out_dir: Path, version: str, json_output: bool = False) -> None:
+    """Print a scoreboard for one (run, version). With --json, emit structured
+    JSON for programmatic consumption (Claude can parse it without re-reading
+    output.json itself)."""
+    output_file = out_dir / version / "output.json"
+    if not output_file.exists():
+        print(f"No results at {output_file}", file=sys.stderr)
+        sys.exit(1)
+
+    results = json.loads(output_file.read_text())
+    cases = []
+    for r in results:
+        sc = r["test_case"].get("scenario", "")
+        scenario = sc.get("title", str(sc)) if isinstance(sc, dict) else str(sc)
+        cases.append({
+            "scenario": scenario,
+            "score": r["score"],
+            "output_length": len(r["output"]),
+            "reasoning": r["reasoning"],
+        })
+
+    scores = [c["score"] for c in cases]
+    avg = round(sum(scores) / len(scores), 1) if scores else 0.0
+    pass_rate = round(100 * len([s for s in scores if s >= 7]) / len(scores), 1) if scores else 0.0
+
+    summary = {
+        "run_id": out_dir.name,
+        "version": version,
+        "average_score": avg,
+        "pass_rate": pass_rate,
+        "cases": cases,
+    }
+
+    if json_output:
+        print(json.dumps(summary, indent=2))
+        return
+
+    print(f"Run: {summary['run_id']}  Version: {version}")
+    print(f"Average: {avg}/10  Pass rate: {pass_rate}%")
+    print()
+    for i, c in enumerate(cases, 1):
+        print(f"=== Case {i}: {c['scenario']}")
+        print(f"  Score: {c['score']}/10")
+        print(f"  Output length: {c['output_length']} chars")
+        print(f"  Reasoning: {c['reasoning']}")
+        print()
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="prompt-eval")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -214,6 +262,11 @@ def _build_parser() -> argparse.ArgumentParser:
     e.add_argument("--judge-model", default="sonnet", choices=["haiku", "sonnet", "opus"])
     e.add_argument("--run-id", required=True, help="e.g. run_001")
     e.add_argument("--extra-criteria", default=None)
+
+    s = sub.add_parser("show", help="Print scoreboard for one (run, version)")
+    s.add_argument("--run-id", required=True, help="e.g. run_001")
+    s.add_argument("--version", required=True, help="e.g. v1, v2")
+    s.add_argument("--json", action="store_true", help="Emit structured JSON")
     return p
 
 
@@ -245,6 +298,10 @@ def main(argv: list | None = None) -> int:
             extra_criteria=args.extra_criteria,
             docs_site_dir=artifact_root / "docs-site",
         )
+        return 0
+    if args.cmd == "show":
+        out_dir = runs_dir / args.run_id
+        _do_show(out_dir, args.version, json_output=args.json)
         return 0
     return 1
 
