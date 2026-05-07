@@ -348,6 +348,39 @@ def _do_evaluate(
     dataset = json.loads((out_dir / "dataset.json").read_text())
     prompt_template = (out_dir / version / "prompt.txt").read_text()
 
+    # Prepare Langfuse client + dataset push if requested. The on_case_complete
+    # callback fires from worker threads inside Evaluator.run_evaluation; the
+    # Langfuse SDK is thread-safe so we don't need a lock.
+    lf_client = None
+    on_case_complete = None
+    dataset_name = None
+    if push_to_langfuse:
+        lf_client = langfuse_push.get_client()
+        dataset_name = langfuse_push.push_dataset(
+            client=lf_client,
+            prompt_name=prompt_name,
+            run_id=metadata["run_id"],
+            dataset=dataset,
+            task_description=metadata.get("task", ""),
+            inputs_spec=metadata.get("inputs_spec", {}),
+        )
+
+        def on_case_complete(index, case, rendered, output, score, reasoning, latency_ms):
+            langfuse_push.push_run_case(
+                client=lf_client,
+                dataset_name=dataset_name,
+                item_index=index,
+                run_id=metadata["run_id"],
+                version=version,
+                prompt_name=prompt_name,
+                rendered_prompt=rendered,
+                output=output,
+                score=score,
+                reasoning=reasoning,
+                model=MODEL_MAP[model],
+                latency_ms=latency_ms,
+            )
+
     evaluator = Evaluator(
         test_model=MODEL_MAP[model],
         judge_model=MODEL_MAP[judge_model],
@@ -357,6 +390,7 @@ def _do_evaluate(
         prompt_template=prompt_template,
         output_file=str(out_dir / version / "output.json"),
         extra_criteria=extra_criteria,
+        on_case_complete=on_case_complete,
     )
 
     # Ensure output.json is written (works for real + mocked run_evaluation).
@@ -387,6 +421,12 @@ def _do_evaluate(
 
     # mkdocs's file watcher silently misses post-startup writes; restart on each evaluate.
     restart_mkdocs(docs_site_dir)
+
+    # Flush Langfuse if push requested. push_succeeded is read by T10's
+    # end-of-command messages.
+    push_succeeded = None
+    if push_to_langfuse and lf_client is not None:
+        push_succeeded = langfuse_push.flush_or_warn(lf_client)
 
     print(f"Evaluated {version}: average {avg:.1f}/10")
 
