@@ -454,6 +454,90 @@ def _do_evaluate(
         )
 
 
+def _do_push(out_dir: Path, prompt_name: str, version: str | None) -> None:
+    """Retroactively push a run's dataset and one or all versions to Langfuse.
+
+    Reads local artifacts (metadata, dataset, output.json) and re-uses the
+    same push primitives as inline push. Errors loud on missing creds,
+    missing metadata, or unknown version.
+    """
+    out_dir = Path(out_dir)
+
+    if not langfuse_push.is_configured():
+        missing = [k for k in langfuse_push.REQUIRED_ENV if not os.environ.get(k)]
+        print(
+            f"ERROR: push requires {', '.join(langfuse_push.REQUIRED_ENV)}. "
+            f"Missing: {', '.join(missing)}.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    meta_file = out_dir / "metadata.json"
+    if not meta_file.exists():
+        print(f"ERROR: no metadata.json at {meta_file}. Run evaluate first.",
+              file=sys.stderr)
+        sys.exit(2)
+
+    metadata = json.loads(meta_file.read_text())
+    available = metadata.get("versions", [])
+    if version is not None and version not in available:
+        print(
+            f"ERROR: version {version} not found in {metadata['run_id']}. "
+            f"Available: {', '.join(available) or '(none)'}.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    versions_to_push = [version] if version else available
+
+    dataset_file = out_dir / "dataset.json"
+    if not dataset_file.exists():
+        print(f"ERROR: no dataset.json at {dataset_file}.", file=sys.stderr)
+        sys.exit(2)
+    dataset = json.loads(dataset_file.read_text())
+
+    client = langfuse_push.get_client()
+    dataset_name = langfuse_push.push_dataset(
+        client=client,
+        prompt_name=prompt_name,
+        run_id=metadata["run_id"],
+        dataset=dataset,
+        task_description=metadata.get("task", ""),
+        inputs_spec=metadata.get("inputs_spec", {}),
+    )
+
+    test_model_resolved = MODEL_MAP[metadata.get("test_model", "haiku")]
+    for v in versions_to_push:
+        results_file = out_dir / v / "output.json"
+        if not results_file.exists():
+            print(f"ERROR: no output.json at {results_file}.", file=sys.stderr)
+            sys.exit(2)
+        results = json.loads(results_file.read_text())
+        for i, r in enumerate(results):
+            langfuse_push.push_run_case(
+                client=client,
+                dataset_name=dataset_name,
+                item_index=i,
+                run_id=metadata["run_id"],
+                version=v,
+                prompt_name=prompt_name,
+                rendered_prompt=str(r["test_case"].get("prompt_inputs", "")),
+                output=r["output"],
+                score=r["score"],
+                reasoning=r["reasoning"],
+                model=test_model_resolved,
+                latency_ms=0,  # not captured in stored output.json
+            )
+
+    ok = langfuse_push.flush_or_warn(client)
+    if ok:
+        print(
+            f"🔭 Langfuse: pushed dataset {dataset_name} ({len(dataset)} items), "
+            f"versions {', '.join(versions_to_push)}"
+        )
+    else:
+        print(f"⚠ Push partially failed. Re-run to retry.")
+
+
 def _do_show(out_dir: Path, version: str, json_output: bool = False) -> None:
     """Print a scoreboard for one (run, version). With --json, emit structured
     JSON for programmatic consumption (Claude can parse it without re-reading
@@ -534,6 +618,12 @@ def _build_parser() -> argparse.ArgumentParser:
     s.add_argument("--version", required=True, help="e.g. v1, v2")
     s.add_argument("--json", action="store_true", help="Emit structured JSON")
     s.add_argument("--prompt", required=True, help="prompt name, e.g. summarizer")
+
+    pu = sub.add_parser("push", help="Retroactively push a run to Langfuse")
+    pu.add_argument("--prompt", required=True, help="prompt name, e.g. summarizer")
+    pu.add_argument("--run-id", required=True, help="e.g. run_001")
+    pu.add_argument("--version", default=None,
+                    help="single version to push; omit to push all versions")
     return p
 
 
@@ -578,6 +668,11 @@ def main(argv: list | None = None) -> int:
         runs_dir = _resolve_runs_dir(args.prompt)
         out_dir = runs_dir / args.run_id
         _do_show(out_dir, args.version, json_output=args.json)
+        return 0
+    if args.cmd == "push":
+        runs_dir = _resolve_runs_dir(args.prompt)
+        out_dir = runs_dir / args.run_id
+        _do_push(out_dir=out_dir, prompt_name=args.prompt, version=args.version)
         return 0
     return 1
 
