@@ -24,3 +24,20 @@ def test_is_configured_false_when_env_var_empty(monkeypatch):
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
     monkeypatch.setenv("LANGFUSE_HOST", "https://example")
     assert langfuse_push.is_configured() is False
+
+
+def test_get_client_returns_none_when_not_configured(monkeypatch):
+    for k in langfuse_push.REQUIRED_ENV:
+        monkeypatch.delenv(k, raising=False)
+    assert langfuse_push.get_client() is None
+
+
+def test_get_client_returns_langfuse_instance_when_configured(monkeypatch):
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    monkeypatch.setenv("LANGFUSE_HOST", "https://example")
+    sentinel = MagicMock(name="LangfuseClient")
+    with patch("prompt_eval.langfuse_push.Langfuse", return_value=sentinel) as ctor:
+        client = langfuse_push.get_client()
+    assert client is sentinel
+    ctor.assert_called_once_with()  # SDK auto-reads env vars
