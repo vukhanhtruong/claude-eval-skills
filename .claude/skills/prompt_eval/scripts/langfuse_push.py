@@ -163,3 +163,18 @@ def push_run_case(
         comment=reasoning,
         data_type="NUMERIC",
     )
+
+
+def flush_or_warn(client) -> bool:
+    """Best-effort flush. Returns False on failure (caller prints recovery hint).
+
+    The Langfuse SDK has internal retry on transient errors; we only land here
+    when retries are exhausted. Local artifacts are already written by the
+    caller, so soft-fail is the right behavior.
+    """
+    try:
+        client.flush()
+        return True
+    except Exception as e:
+        print(f"⚠ Langfuse flush failed: {e}")
+        return False

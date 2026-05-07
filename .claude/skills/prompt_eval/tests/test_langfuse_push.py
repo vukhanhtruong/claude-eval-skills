@@ -217,3 +217,19 @@ def test_push_run_case_raises_when_dataset_item_not_found():
             model="m",
             latency_ms=1,
         )
+
+
+def test_flush_or_warn_returns_true_on_success(capsys):
+    client = MagicMock(name="LangfuseClient")
+    assert langfuse_push.flush_or_warn(client) is True
+    client.flush.assert_called_once()
+    assert "flush failed" not in capsys.readouterr().out
+
+
+def test_flush_or_warn_returns_false_and_warns_on_exception(capsys):
+    client = MagicMock(name="LangfuseClient")
+    client.flush.side_effect = ConnectionError("boom")
+    assert langfuse_push.flush_or_warn(client) is False
+    out = capsys.readouterr().out
+    assert "Langfuse flush failed" in out
+    assert "boom" in out
