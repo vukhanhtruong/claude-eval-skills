@@ -7,6 +7,15 @@ allowed-tools: Read, Write, Edit, Bash
 
 You are running the `/prompt_eval` workflow. Follow these steps strictly.
 
+## What you get
+
+After each evaluation, you get:
+
+- A local **MkDocs site** (always, no setup) — for solo iteration
+- An optional push to **Langfuse** (requires `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` in the environment) — for team review and historical comparison
+
+Both run in the same workflow; Langfuse is purely additive.
+
 ## Argument parsing
 
 Parse `$ARGUMENTS`:
@@ -143,6 +152,12 @@ Read `prompt_eval_runs/prompts/{prompt}/runs/run_NNN/dataset.json`. Show the use
 
 ## Step 3 — Run + grade
 
+**Before the FIRST evaluate of this session:** check whether all three of `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` are set in the environment. If they are, ask the user once:
+
+> "Langfuse credentials detected. Push results to Langfuse for this run? [Y/n]"
+
+If the user answers yes, add `--push-to-langfuse` to every `evaluate` invocation in this session. If no, omit the flag. Do not ask again unless the user explicitly changes their mind. If credentials are not all set, never ask — just proceed without the flag.
+
 Run:
 ```bash
 uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval evaluate \
@@ -150,10 +165,13 @@ uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval evaluate \
   --version v{n} \
   --model {model} \
   --judge-model {judge_model} \
-  --run-id run_NNN
+  --run-id run_NNN \
+  [--push-to-langfuse]
 ```
 
 Stream output. When complete, the script auto-regenerates the docs site and starts `mkdocs serve` if it's not already running. The first invocation per project also bootstraps `prompt_eval_runs/docs-site/` from the bundled template.
+
+If the output mentions `⚠ Langfuse flush failed`, run the suggested `prompt-eval push ...` command to retry. If the user said "no" earlier and changes their mind later, the same `prompt-eval push` command works retroactively.
 
 (uvx builds the package from the skill dir on first run and caches it; subsequent invocations reuse the cached env.)
 
