@@ -11,6 +11,7 @@ import sys
 import time
 from pathlib import Path
 from statistics import mean
+from typing import Callable, Optional
 
 # Telemetry opt-out before any deepeval import
 os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "1")
@@ -352,7 +353,9 @@ def _do_evaluate(
     # callback fires from worker threads inside Evaluator.run_evaluation; the
     # Langfuse SDK is thread-safe so we don't need a lock.
     lf_client = None
-    on_case_complete = None
+    on_case_complete: Optional[
+        Callable[[int, dict, str, str, int, str, int], None]
+    ] = None
     dataset_name = None
     if push_to_langfuse:
         lf_client = langfuse_push.get_client()
@@ -365,7 +368,7 @@ def _do_evaluate(
             inputs_spec=metadata.get("inputs_spec", {}),
         )
 
-        def on_case_complete(index, case, rendered, output, score, reasoning, latency_ms):
+        def _push_case_callback(index, case, rendered, output, score, reasoning, latency_ms):
             langfuse_push.push_run_case(
                 client=lf_client,
                 dataset_name=dataset_name,
@@ -380,6 +383,7 @@ def _do_evaluate(
                 model=MODEL_MAP[model],
                 latency_ms=latency_ms,
             )
+        on_case_complete = _push_case_callback
 
     evaluator = Evaluator(
         test_model=MODEL_MAP[model],

@@ -2,7 +2,6 @@
 
 Skipped by default. Run with `pytest -m e2e` AND with LANGFUSE_* env vars set.
 """
-import os
 import time
 import pytest
 
