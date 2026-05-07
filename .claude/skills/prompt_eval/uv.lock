@@ -1166,7 +1166,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", specifier = ">=0.97.0" },
     { name = "deepeval", specifier = ">=2.0" },
-    { name = "langfuse", specifier = ">=2.0" },
+    { name = "langfuse", specifier = ">=4.0" },
     { name = "mkdocs-material", specifier = ">=9.5" },
     { name = "pymdown-extensions", specifier = ">=10.7" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
