@@ -86,3 +86,61 @@ def test_evaluate_warns_when_judge_model_changes(
     )
     out = capsys.readouterr().out
     assert "originally evaluated with judge_model=sonnet" in out.lower() or "warning" in out.lower()
+
+
+import pytest
+from prompt_eval.run import _build_parser, _do_evaluate
+
+
+def test_evaluate_parser_accepts_push_to_langfuse_flag():
+    parser = _build_parser()
+    args = parser.parse_args([
+        "evaluate", "--prompt", "summarizer",
+        "--run-id", "run_001", "--version", "v1",
+        "--push-to-langfuse",
+    ])
+    assert args.push_to_langfuse is True
+
+
+def test_evaluate_parser_push_to_langfuse_defaults_false():
+    parser = _build_parser()
+    args = parser.parse_args([
+        "evaluate", "--prompt", "summarizer",
+        "--run-id", "run_001", "--version", "v1",
+    ])
+    assert args.push_to_langfuse is False
+
+
+@patch("prompt_eval.run.regenerate_for_run")
+@patch("prompt_eval.run.restart_mkdocs")
+@patch("prompt_eval.run._bootstrap_docs_site")
+@patch("prompt_eval.run.Evaluator")
+def test_evaluate_fast_fails_when_push_set_but_creds_missing(
+    eval_cls, mock_bootstrap, start_mkdocs, regen, tmp_path, monkeypatch, capsys
+):
+    for k in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_001"
+    (out_dir / "v1").mkdir(parents=True)
+    (out_dir / "dataset.json").write_text("[]")
+    (out_dir / "v1" / "prompt.txt").write_text("p")
+    (out_dir / "metadata.json").write_text(json.dumps({
+        "run_id": "run_001", "prompt_name": "summarizer",
+        "test_model": "haiku", "judge_model": None,
+        "dataset_size": 0, "versions": [], "version_data": {},
+    }))
+
+    with pytest.raises(SystemExit) as exc:
+        _do_evaluate(
+            version="v1", model="haiku", judge_model="sonnet",
+            out_dir=out_dir, extra_criteria=None,
+            prompt_name="summarizer",
+            push_to_langfuse=True,
+        )
+    assert exc.value.code != 0
+    err = capsys.readouterr().err
+    assert "LANGFUSE_PUBLIC_KEY" in err
+    # Critically: evaluator was NEVER instantiated — no LLM calls happened
+    eval_cls.assert_not_called()

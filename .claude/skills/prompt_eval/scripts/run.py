@@ -17,6 +17,7 @@ os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "1")
 
 from prompt_eval.evaluator import MODEL_MAP, DatasetGenerator, Evaluator
 from prompt_eval.docs_generator import regenerate_for_run
+from prompt_eval import langfuse_push
 
 
 MKDOCS_PORT = 8000
@@ -319,10 +320,22 @@ def _do_evaluate(
     out_dir: Path, extra_criteria: str | None,
     prompt_name: str,
     docs_site_dir: Path | None = None,
+    push_to_langfuse: bool = False,
 ) -> None:
     out_dir = Path(out_dir)
     meta_file = out_dir / "metadata.json"
     metadata = json.loads(meta_file.read_text())
+
+    # Fast-fail: refuse to run an expensive eval if the user asked to push
+    # but the env isn't configured. Print the missing var by name.
+    if push_to_langfuse and not langfuse_push.is_configured():
+        missing = [k for k in langfuse_push.REQUIRED_ENV if not os.environ.get(k)]
+        print(
+            f"ERROR: --push-to-langfuse requires {', '.join(langfuse_push.REQUIRED_ENV)}. "
+            f"Missing: {', '.join(missing)}. Set them or omit --push-to-langfuse.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
     # Warn if judge_model changes from prior runs
     prior_judge = metadata.get("judge_model")
@@ -450,6 +463,8 @@ def _build_parser() -> argparse.ArgumentParser:
     e.add_argument("--run-id", required=True, help="e.g. run_001")
     e.add_argument("--extra-criteria", default=None)
     e.add_argument("--prompt", required=True, help="prompt name, e.g. summarizer")
+    e.add_argument("--push-to-langfuse", action="store_true",
+                   help="Also publish dataset, traces, and scores to Langfuse")
 
     s = sub.add_parser("show", help="Print scoreboard for one (run, version)")
     s.add_argument("--run-id", required=True, help="e.g. run_001")
@@ -493,6 +508,7 @@ def main(argv: list | None = None) -> int:
             extra_criteria=args.extra_criteria,
             prompt_name=args.prompt,
             docs_site_dir=artifact_root / "docs-site",
+            push_to_langfuse=args.push_to_langfuse,
         )
         return 0
     if args.cmd == "show":
