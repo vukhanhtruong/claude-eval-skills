@@ -429,6 +429,29 @@ def _do_evaluate(
         push_succeeded = langfuse_push.flush_or_warn(lf_client)
 
     print(f"Evaluated {version}: average {avg:.1f}/10")
+    print(f"📊 MkDocs:   http://127.0.0.1:{MKDOCS_PORT}")
+
+    retry_cmd = (
+        f"prompt-eval push --prompt {prompt_name} "
+        f"--run-id {metadata['run_id']} --version {version}"
+    )
+    if push_to_langfuse:
+        if push_succeeded:
+            n = len(results)
+            print(
+                f"🔭 Langfuse: pushed dataset {dataset_name} ({len(dataset)} items), "
+                f"run {version} ({n} traces, {n} scores)"
+            )
+        else:
+            print(
+                f"⚠ Langfuse flush failed. Local results saved.\n"
+                f"   Retry with: {retry_cmd}"
+            )
+    elif langfuse_push.is_configured():
+        print(
+            f"💡 Langfuse credentials detected. To push this run:\n"
+            f"   {retry_cmd}"
+        )
 
 
 def _do_show(out_dir: Path, version: str, json_output: bool = False) -> None:

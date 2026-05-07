@@ -256,3 +256,142 @@ def test_evaluate_without_push_does_not_touch_langfuse(
     lf.push_dataset.assert_not_called()
     lf.push_run_case.assert_not_called()
     lf.flush_or_warn.assert_not_called()
+
+
+@patch("prompt_eval.run.regenerate_for_run")
+@patch("prompt_eval.run.restart_mkdocs")
+@patch("prompt_eval.run._bootstrap_docs_site")
+@patch("prompt_eval.run.langfuse_push")
+@patch("prompt_eval.run.Evaluator")
+def test_evaluate_prints_success_message_when_push_ok(
+    eval_cls, lf, mock_bootstrap, start_mkdocs, regen,
+    tmp_path, monkeypatch, capsys
+):
+    for k in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST"):
+        monkeypatch.setenv(k, "x")
+    monkeypatch.setenv("LANGFUSE_HOST", "https://lf.example")
+    monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_001"
+    (out_dir / "v1").mkdir(parents=True)
+    (out_dir / "dataset.json").write_text(json.dumps([
+        {"scenario": "A", "prompt_inputs": {}, "solution_criteria": ["c"], "task_description": "t"},
+    ]))
+    (out_dir / "v1" / "prompt.txt").write_text("p")
+    (out_dir / "metadata.json").write_text(json.dumps({
+        "run_id": "run_001", "prompt_name": "summarizer",
+        "test_model": "haiku", "judge_model": None,
+        "dataset_size": 1, "versions": [], "version_data": {},
+    }))
+
+    lf.is_configured.return_value = True
+    lf.REQUIRED_ENV = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST")
+    lf.get_client.return_value = MagicMock()
+    lf.push_dataset.return_value = "summarizer-run_001"
+    lf.flush_or_warn.return_value = True
+    eval_cls.return_value.run_evaluation.return_value = [
+        {"test_case": {"scenario": "A", "solution_criteria": ["c"]},
+         "output": "x", "score": 8, "reasoning": "ok"},
+    ]
+
+    _do_evaluate(
+        version="v1", model="haiku", judge_model="sonnet",
+        out_dir=out_dir, extra_criteria=None,
+        prompt_name="summarizer",
+        push_to_langfuse=True,
+    )
+    out = capsys.readouterr().out
+    assert "📊 MkDocs:" in out
+    assert "🔭 Langfuse:" in out
+    assert "summarizer-run_001" in out
+
+
+@patch("prompt_eval.run.regenerate_for_run")
+@patch("prompt_eval.run.restart_mkdocs")
+@patch("prompt_eval.run._bootstrap_docs_site")
+@patch("prompt_eval.run.langfuse_push")
+@patch("prompt_eval.run.Evaluator")
+def test_evaluate_prints_retry_hint_when_flush_fails(
+    eval_cls, lf, mock_bootstrap, start_mkdocs, regen,
+    tmp_path, monkeypatch, capsys
+):
+    for k in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST"):
+        monkeypatch.setenv(k, "x")
+    monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_001"
+    (out_dir / "v1").mkdir(parents=True)
+    (out_dir / "dataset.json").write_text(json.dumps([
+        {"scenario": "A", "prompt_inputs": {}, "solution_criteria": ["c"], "task_description": "t"},
+    ]))
+    (out_dir / "v1" / "prompt.txt").write_text("p")
+    (out_dir / "metadata.json").write_text(json.dumps({
+        "run_id": "run_001", "prompt_name": "summarizer",
+        "test_model": "haiku", "judge_model": None,
+        "dataset_size": 1, "versions": [], "version_data": {},
+    }))
+
+    lf.is_configured.return_value = True
+    lf.REQUIRED_ENV = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST")
+    lf.get_client.return_value = MagicMock()
+    lf.push_dataset.return_value = "summarizer-run_001"
+    lf.flush_or_warn.return_value = False  # flush failed
+    eval_cls.return_value.run_evaluation.return_value = [
+        {"test_case": {"scenario": "A", "solution_criteria": ["c"]},
+         "output": "x", "score": 8, "reasoning": "ok"},
+    ]
+
+    _do_evaluate(
+        version="v1", model="haiku", judge_model="sonnet",
+        out_dir=out_dir, extra_criteria=None,
+        prompt_name="summarizer",
+        push_to_langfuse=True,
+    )
+    out = capsys.readouterr().out
+    assert "Retry with: prompt-eval push" in out
+    assert "--prompt summarizer" in out
+    assert "--run-id run_001" in out
+    assert "--version v1" in out
+
+
+@patch("prompt_eval.run.regenerate_for_run")
+@patch("prompt_eval.run.restart_mkdocs")
+@patch("prompt_eval.run._bootstrap_docs_site")
+@patch("prompt_eval.run.langfuse_push")
+@patch("prompt_eval.run.Evaluator")
+def test_evaluate_prints_creds_hint_when_creds_present_but_flag_off(
+    eval_cls, lf, mock_bootstrap, start_mkdocs, regen,
+    tmp_path, monkeypatch, capsys
+):
+    for k in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST"):
+        monkeypatch.setenv(k, "x")
+    monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_001"
+    (out_dir / "v1").mkdir(parents=True)
+    (out_dir / "dataset.json").write_text(json.dumps([
+        {"scenario": "A", "prompt_inputs": {}, "solution_criteria": ["c"], "task_description": "t"},
+    ]))
+    (out_dir / "v1" / "prompt.txt").write_text("p")
+    (out_dir / "metadata.json").write_text(json.dumps({
+        "run_id": "run_001", "prompt_name": "summarizer",
+        "test_model": "haiku", "judge_model": None,
+        "dataset_size": 1, "versions": [], "version_data": {},
+    }))
+
+    lf.is_configured.return_value = True
+    lf.REQUIRED_ENV = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST")
+    eval_cls.return_value.run_evaluation.return_value = [
+        {"test_case": {"scenario": "A", "solution_criteria": ["c"]},
+         "output": "x", "score": 8, "reasoning": "ok"},
+    ]
+
+    _do_evaluate(
+        version="v1", model="haiku", judge_model="sonnet",
+        out_dir=out_dir, extra_criteria=None,
+        prompt_name="summarizer",
+        push_to_langfuse=False,
+    )
+    out = capsys.readouterr().out
+    assert "💡 Langfuse credentials detected" in out
+    assert "prompt-eval push --prompt summarizer --run-id run_001 --version v1" in out
