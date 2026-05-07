@@ -122,3 +122,98 @@ def test_push_dataset_upserts_and_warns_when_present(sample_dataset, capsys):
     out = capsys.readouterr().out
     assert "exists in Langfuse" in out
     assert "summarizer-run_001" in out
+
+
+def test_push_run_case_creates_span_score_and_dataset_run_item():
+    client = MagicMock(name="LangfuseClient")
+
+    # client.get_dataset(name) → DatasetClient with .items containing one item
+    # whose deterministic id matches what push_run_case computes for index 0.
+    item_obj = MagicMock(name="DatasetItem")
+    item_obj.id = "summarizer-run_001-item-0"
+    item_obj.dataset_id = "ds-uuid"
+    dataset_obj = MagicMock(name="DatasetClient")
+    dataset_obj.items = [item_obj]
+    client.get_dataset.return_value = dataset_obj
+
+    # start_as_current_observation returns a context manager whose __enter__
+    # yields a span with .trace_id and .id attributes.
+    span = MagicMock(name="Span")
+    span.trace_id = "trace-uuid"
+    span.id = "obs-uuid"
+    span_ctx = MagicMock()
+    span_ctx.__enter__ = MagicMock(return_value=span)
+    span_ctx.__exit__ = MagicMock(return_value=None)
+    client.start_as_current_observation.return_value = span_ctx
+
+    langfuse_push.push_run_case(
+        client=client,
+        dataset_name="summarizer-run_001",
+        item_index=0,
+        run_id="run_001",
+        version="v1",
+        prompt_name="summarizer",
+        rendered_prompt="Summarize: hello world",
+        output="hello world summary",
+        score=8,
+        reasoning="meets all criteria",
+        model="claude-haiku-4-5",
+        latency_ms=1234,
+    )
+
+    # 1. Span created with input, output, metadata, name
+    client.start_as_current_observation.assert_called_once()
+    span_kwargs = client.start_as_current_observation.call_args.kwargs
+    assert span_kwargs["input"] == "Summarize: hello world"
+    assert span_kwargs["output"] == "hello world summary"
+    assert span_kwargs["metadata"]["model"] == "claude-haiku-4-5"
+    assert span_kwargs["metadata"]["latency_ms"] == 1234
+    assert span_kwargs["metadata"]["version"] == "v1"
+    assert span_kwargs["metadata"]["raw_score"] == 8
+    assert "summarizer/run_001/v1" in span_kwargs["name"]
+
+    # 2. Dataset run item created — links trace to dataset run and lazily
+    #    creates the run by run_name on first call.
+    client.api.dataset_run_items.create.assert_called_once()
+    dri_kwargs = client.api.dataset_run_items.create.call_args.kwargs
+    assert dri_kwargs["run_name"] == "v1"
+    assert dri_kwargs["dataset_item_id"] == "summarizer-run_001-item-0"
+    assert dri_kwargs["trace_id"] == "trace-uuid"
+    assert dri_kwargs["observation_id"] == "obs-uuid"
+    assert dri_kwargs["run_description"] == "test_model=claude-haiku-4-5"
+    assert dri_kwargs["metadata"]["prompt_name"] == "summarizer"
+    assert dri_kwargs["metadata"]["run_id"] == "run_001"
+    assert dri_kwargs["metadata"]["version"] == "v1"
+    assert dri_kwargs["metadata"]["test_model"] == "claude-haiku-4-5"
+
+    # 3. Score created and attached to trace, value normalized to 0..1
+    client.create_score.assert_called_once()
+    sc_kwargs = client.create_score.call_args.kwargs
+    assert sc_kwargs["name"] == "Task Quality"
+    assert sc_kwargs["value"] == pytest.approx(0.8)
+    assert sc_kwargs["trace_id"] == "trace-uuid"
+    assert sc_kwargs["comment"] == "meets all criteria"
+    assert sc_kwargs["data_type"] == "NUMERIC"
+
+
+def test_push_run_case_raises_when_dataset_item_not_found():
+    client = MagicMock(name="LangfuseClient")
+    dataset_obj = MagicMock(name="DatasetClient")
+    dataset_obj.items = []  # no items
+    client.get_dataset.return_value = dataset_obj
+
+    with pytest.raises(ValueError, match="not found"):
+        langfuse_push.push_run_case(
+            client=client,
+            dataset_name="summarizer-run_001",
+            item_index=0,
+            run_id="run_001",
+            version="v1",
+            prompt_name="summarizer",
+            rendered_prompt="x",
+            output="y",
+            score=5,
+            reasoning="r",
+            model="m",
+            latency_ms=1,
+        )
