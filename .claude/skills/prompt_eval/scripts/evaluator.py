@@ -25,7 +25,9 @@ def render_prompt(template: str, variables: dict) -> str:
 
 import concurrent.futures
 import json
+import time
 from textwrap import dedent
+from typing import Callable, Optional
 from anthropic import Anthropic
 from deepeval.metrics import GEval
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
@@ -236,11 +238,30 @@ class Evaluator:
         prompt_template: str,
         output_file: str,
         extra_criteria: str | None = None,
+        on_case_complete: Optional[
+            Callable[[int, dict, str, str, int, str, int], None]
+        ] = None,
     ) -> list:
-        """Run + grade every case in the dataset; write JSON to output_file."""
-        def _process(case):
+        """Run + grade every case in the dataset; write JSON to output_file.
+
+        If ``on_case_complete`` is provided, it's called once per case with
+        ``(index, case, rendered_prompt, output, score, reasoning, latency_ms)``.
+        ``index`` is the case's position in the input dataset (captured at
+        submit time, stable under parallel execution). The callback may run
+        from worker threads; callees must be thread-safe.
+        """
+        def _process(indexed_case):
+            index, case = indexed_case
+            t0 = time.monotonic()
+            rendered = render_prompt(prompt_template, case["prompt_inputs"])
             output = self.run_test_case(case, prompt_template)
             grade = self.grade_with_geval(case, output, extra_criteria)
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            if on_case_complete is not None:
+                on_case_complete(
+                    index, case, rendered, output,
+                    grade["score"], grade["reasoning"], latency_ms,
+                )
             return {
                 "test_case": case,
                 "output": output,
@@ -253,7 +274,7 @@ class Evaluator:
             max_workers=self.max_concurrent_tasks
         ) as ex:
             for fut in concurrent.futures.as_completed(
-                [ex.submit(_process, c) for c in dataset]
+                [ex.submit(_process, ic) for ic in enumerate(dataset)]
             ):
                 results.append(fut.result())
 
