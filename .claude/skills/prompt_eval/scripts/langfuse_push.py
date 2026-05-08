@@ -9,19 +9,34 @@ from typing import Optional
 from langfuse import Langfuse
 
 
-REQUIRED_ENV = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST")
+# Auth credentials — both required.
+REQUIRED_ENV = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY")
+
+# Host can be set via either var (matches Langfuse SDK precedence: BASE_URL
+# first, HOST as fallback). Either being non-empty is sufficient.
+HOST_ENV = ("LANGFUSE_BASE_URL", "LANGFUSE_HOST")
 
 
 def is_configured() -> bool:
-    """Return True iff all three Langfuse env vars are present and non-empty."""
-    return all(os.environ.get(k) for k in REQUIRED_ENV)
+    """Return True iff PUBLIC_KEY, SECRET_KEY, and one of HOST/BASE_URL are set."""
+    if not all(os.environ.get(k) for k in REQUIRED_ENV):
+        return False
+    return any(os.environ.get(k) for k in HOST_ENV)
+
+
+def missing_env_vars() -> list:
+    """Return user-facing list of missing env vars. HOST/BASE_URL count as one slot."""
+    missing = [k for k in REQUIRED_ENV if not os.environ.get(k)]
+    if not any(os.environ.get(k) for k in HOST_ENV):
+        missing.append("LANGFUSE_HOST or LANGFUSE_BASE_URL")
+    return missing
 
 
 def get_client() -> Optional[Langfuse]:
     """Return a Langfuse client if env vars are set, else None.
 
-    The SDK auto-reads LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_HOST
-    from the environment, so we don't pass them explicitly.
+    The SDK auto-reads LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY and either
+    LANGFUSE_HOST or LANGFUSE_BASE_URL from the environment.
     """
     if not is_configured():
         return None

@@ -233,3 +233,39 @@ def test_flush_or_warn_returns_false_and_warns_on_exception(capsys):
     out = capsys.readouterr().out
     assert "Langfuse flush failed" in out
     assert "boom" in out
+
+
+def test_is_configured_accepts_base_url_alias(monkeypatch):
+    """LANGFUSE_BASE_URL satisfies the host requirement (Langfuse SDK convention)."""
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "https://example")
+    assert langfuse_push.is_configured() is True
+
+
+def test_is_configured_false_when_neither_host_nor_base_url(monkeypatch):
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
+    assert langfuse_push.is_configured() is False
+
+
+def test_missing_env_vars_treats_host_and_base_url_as_one_slot(monkeypatch):
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
+    missing = langfuse_push.missing_env_vars()
+    assert "LANGFUSE_PUBLIC_KEY" in missing
+    assert "LANGFUSE_SECRET_KEY" not in missing
+    assert any("HOST" in m and "BASE_URL" in m for m in missing)
+
+
+def test_missing_env_vars_empty_when_base_url_satisfies_host(monkeypatch):
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "https://example")
+    assert langfuse_push.missing_env_vars() == []

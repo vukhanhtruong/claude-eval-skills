@@ -330,9 +330,10 @@ def _do_evaluate(
     # Fast-fail: refuse to run an expensive eval if the user asked to push
     # but the env isn't configured. Print the missing var by name.
     if push_to_langfuse and not langfuse_push.is_configured():
-        missing = [k for k in langfuse_push.REQUIRED_ENV if not os.environ.get(k)]
+        missing = langfuse_push.missing_env_vars()
         print(
-            f"ERROR: --push-to-langfuse requires {', '.join(langfuse_push.REQUIRED_ENV)}. "
+            f"ERROR: --push-to-langfuse requires LANGFUSE_PUBLIC_KEY, "
+            f"LANGFUSE_SECRET_KEY, and LANGFUSE_HOST (or LANGFUSE_BASE_URL). "
             f"Missing: {', '.join(missing)}. Set them or omit --push-to-langfuse.",
             file=sys.stderr,
         )
@@ -468,9 +469,10 @@ def _do_push(out_dir: Path, prompt_name: str, version: str | None) -> None:
     out_dir = Path(out_dir)
 
     if not langfuse_push.is_configured():
-        missing = [k for k in langfuse_push.REQUIRED_ENV if not os.environ.get(k)]
+        missing = langfuse_push.missing_env_vars()
         print(
-            f"ERROR: push requires {', '.join(langfuse_push.REQUIRED_ENV)}. "
+            f"ERROR: push requires LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, "
+            f"and LANGFUSE_HOST (or LANGFUSE_BASE_URL). "
             f"Missing: {', '.join(missing)}.",
             file=sys.stderr,
         )
