@@ -6,3 +6,6 @@ __pycache__/
 build/
 *.egg-info/
 mkdocs.log
+.env
+.env.*
+!.env.example
