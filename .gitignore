@@ -1,6 +1,9 @@
 # Per-project artifacts produced by /prompt_eval when run in this repo
 prompt_eval_runs/
 
+# Local design docs and plans (superpowers workflow)
+docs/
+
 # Python local artifacts
 __pycache__/
 *.pyc
