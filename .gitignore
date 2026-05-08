@@ -8,3 +8,8 @@ __pycache__/
 .deepeval/
 .benchmarks/
 .venv/
+
+# Local secrets (Langfuse, etc.)
+.env
+.env.*
+!.env.example
