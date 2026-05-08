@@ -26,18 +26,20 @@ Skills are markdown files plus optional supporting code that give AI agents spec
 npx skills add vukhanhtruong/claude-eval-skill --list
 
 # Interactive: prompts you to pick which skills to install
-npx skills add vukhanhtruong/claude-eval-skill
+npx skills add vukhanhtruong/claude-eval-skill --agent claude-code
 
 # Install a specific skill only (project-level)
-npx skills add vukhanhtruong/claude-eval-skill --skill prompt_eval -y
+npx skills add vukhanhtruong/claude-eval-skill --skill prompt_eval --agent claude-code -y
 
 # Install everything in the repo, globally, no prompts
-npx skills add vukhanhtruong/claude-eval-skill -g --all
+npx skills add vukhanhtruong/claude-eval-skill --agent claude-code -g --all
 
 # List installed / global skills
 npx skills list
 npx skills list --global
 ```
+
+> **Pass `--agent claude-code`** so files land in `.claude/skills/` (where Claude Code looks). Without it the CLI installs to the universal `.agents/skills/` path, which Claude Code does not read. To target multiple agents at once, use `--agent '*'`.
 
 > Tip: as more skills land in this repo (`rag_eval`, `tool_eval`, `agent_eval`), `--skill <name>` lets you pull in just the ones you need.
 
