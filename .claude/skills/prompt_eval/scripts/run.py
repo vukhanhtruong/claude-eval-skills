@@ -630,11 +630,19 @@ def _build_parser() -> argparse.ArgumentParser:
     pu.add_argument("--run-id", required=True, help="e.g. run_001")
     pu.add_argument("--version", default=None,
                     help="single version to push; omit to push all versions")
+
+    sub.add_parser("stop-server", help="Stop the mkdocs serve process")
     return p
 
 
 def main(argv: list | None = None) -> int:
     args = _build_parser().parse_args(argv)
+
+    if args.cmd == "stop-server":
+        _kill_mkdocs()
+        print("mkdocs server stopped.")
+        return 0
+
     artifact_root = _resolve_artifact_root()
     _migrate_legacy_layout(artifact_root)
 

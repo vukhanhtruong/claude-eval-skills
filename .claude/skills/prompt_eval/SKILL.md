@@ -222,5 +222,9 @@ If a/b/c chosen:
 - Loop back to Step 5.
 
 If d) Done:
-- Tell the user: "Comparison report at `http://127.0.0.1:8000/prompts/{prompt}/runs/run_NNN/comparison/` (if 2+ versions). All runs at `http://127.0.0.1:8000/`."
+- Stop the mkdocs server:
+```bash
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval stop-server
+```
+- Tell the user: "Session complete. The mkdocs server has been stopped. To view results later, run `cd prompt_eval_runs/docs-site && uv run mkdocs serve`."
 - Stop.
