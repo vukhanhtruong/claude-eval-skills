@@ -26,6 +26,29 @@ def score_badge(score: int) -> str:
     return f'<span style="{style}">{score}</span>'
 
 
+def _format_scenario(scenario: str) -> str:
+    """Format scenario JSON as readable key-value lines."""
+    try:
+        data = json.loads(scenario) if isinstance(scenario, str) else scenario
+        if isinstance(data, dict):
+            lines = [f"**{k}:** {v}" for k, v in data.items()]
+            return "<br>".join(lines)
+        return str(data)
+    except (json.JSONDecodeError, TypeError):
+        return scenario
+
+
+def _scenario_title(scenario: str) -> str:
+    """Extract a short title from scenario for anchor text."""
+    try:
+        data = json.loads(scenario) if isinstance(scenario, str) else scenario
+        if isinstance(data, dict):
+            return data.get("title", data.get("id", "Case"))[:50]
+        return str(data)[:50]
+    except (json.JSONDecodeError, TypeError):
+        return scenario[:50]
+
+
 def render_version_page(version_label: str, prompt_text: str, results: list) -> str:
     """Render one version's Markdown page (prompt + per-case results table)."""
     scores = [r["score"] for r in results]
@@ -34,13 +57,25 @@ def render_version_page(version_label: str, prompt_text: str, results: list) -> 
         100 * len([s for s in scores if s >= 7]) / len(scores) if scores else 0
     )
     rows = []
-    for r in results:
+    for i, r in enumerate(results):
+        scenario_fmt = _format_scenario(r['test_case']['scenario'])
+        output_link = f'<a href="#output-{i+1}">▶ output</a>'
         rows.append(
-            f"| {r['test_case']['scenario']} | {score_badge(r['score'])} | "
+            f"| {scenario_fmt}<br>{output_link} | {score_badge(r['score'])} | "
             f"{r['reasoning']} |"
         )
 
     table = "\n".join(rows)
+
+    # Outputs section with anchors
+    outputs = []
+    for i, r in enumerate(results):
+        title = _scenario_title(r['test_case']['scenario'])
+        outputs.append(
+            f'<h4 id="output-{i+1}">{i+1}. {title}</h4>\n\n'
+            f'```text\n{r["output"]}\n```\n'
+        )
+    outputs_section = "\n".join(outputs)
 
     return f"""{_HIDE_TOC_FRONT_MATTER}# Version {version_label}
 
@@ -61,16 +96,10 @@ def render_version_page(version_label: str, prompt_text: str, results: list) -> 
 
 ## Outputs
 
-{_render_outputs(results)}
+{outputs_section}
 """
 
 
-def _render_outputs(results: list) -> str:
-    blocks = []
-    for r in results:
-        scenario = r["test_case"]["scenario"]
-        blocks.append(f"### {scenario}\n\n```text\n{r['output']}\n```\n")
-    return "\n".join(blocks)
 
 
 import difflib
