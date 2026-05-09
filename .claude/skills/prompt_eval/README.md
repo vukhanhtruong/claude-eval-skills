@@ -15,6 +15,40 @@ Per evaluated prompt, the skill produces:
 - **Failure-pattern analysis** — Claude classifies low-scoring cases against a fixed remedy table and proposes the next iteration
 - **Optional Langfuse push** — datasets, traces, scores, and dataset-runs published to your Langfuse instance for team review and historical comparison
 
+## Optional: set up Langfuse
+
+Langfuse is **purely additive** — the skill always produces a local MkDocs site. Skip this section unless you want shared dashboards or run-history across a team.
+
+You need three env vars:
+
+| Var | Required? | Notes |
+|---|---|---|
+| `LANGFUSE_PUBLIC_KEY` | yes | from project settings in Langfuse |
+| `LANGFUSE_SECRET_KEY` | yes | from project settings in Langfuse |
+| `LANGFUSE_HOST` *or* `LANGFUSE_BASE_URL` | yes (one of) | e.g. `https://cloud.langfuse.com`, `https://us.cloud.langfuse.com`, or your self-hosted URL |
+
+**1. Get keys.** [Sign up at cloud.langfuse.com](https://cloud.langfuse.com/) (free tier exists) or self-host. Create a project, then copy the public + secret keys from *Settings → API keys*.
+
+**2. Load them into your shell.** Copy the example file and fill it in:
+
+```bash
+cp .env.example .env
+# edit .env with your keys
+
+# load into the current shell (skill reads from os.environ, doesn't auto-load .env)
+set -a; source .env; set +a
+```
+
+`.env` is gitignored. Alternatively, `export LANGFUSE_PUBLIC_KEY=...` etc. directly, or put them in your shell rc.
+
+**3. Verify.** The skill auto-detects Langfuse during `evaluate` — when keys are set, it prints "Pushed to Langfuse: <url>" alongside the local MkDocs URL. To push an existing run retroactively:
+
+```bash
+uvx --from .claude/skills/prompt_eval prompt-eval push --prompt summarizer --run-id run_001
+```
+
+If a var is missing, the CLI prints which one. If everything is set, you'll see Langfuse URLs in the output.
+
 ## Usage
 
 Once installed, invoke the skill end-to-end via the slash command:
