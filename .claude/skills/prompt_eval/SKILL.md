@@ -120,6 +120,17 @@ Ask: "Are there specific failure modes you've seen or anticipate?"
 
 If yes, draft a targeted example covering that case and add it to the examples block.
 
+### Phase G: Reasoning gate (only if task benefits from chain-of-thought)
+
+Judge whether the task involves multi-step reasoning, comparison, judgment, or classification-with-rationale. If it's a single-shot transform, simple lookup, or format conversion, skip this phase silently.
+
+**Coaching: WHEN task benefits from reasoning before output:**
+> "This task involves {brief description of what Claude must reason through — e.g. 'weighing face shape, hair texture, and skin tone before each recommendation'}. Anthropic recommends letting Claude think first. Add a `<thinking>` block before the answer? (yes / no / suggest)"
+
+If yes:
+- Free-form output → add "Think step by step before responding." or wrap reasoning in `<thinking>...</thinking>`.
+- Structured output (JSON/HTML) → keep reasoning inside `<thinking>` tags and add a final instruction: "After the `<thinking>` block, output ONLY the {format}."
+
 ### Coaching: WHEN instructions contradict
 > "These conflict: '{a}' vs '{b}'. Resolve by picking one or describing the balance."
 
@@ -190,6 +201,12 @@ Parse the JSON output (it has `run_id`, `version`, `average_score`, `pass_rate`,
 |---|---|---|
 
 Print average and pass rate. Print the URL to the version page (e.g. `http://127.0.0.1:8000/prompts/{prompt}/runs/run_001/v1/`).
+
+**Baseline-coverage check (before failure analysis):** read `prompt_eval_runs/prompts/{prompt}/runs/run_NNN/v{n}/prompt.txt` and count `<example>` blocks. If zero, surface this as a recommendation alongside the #1 failure-pattern suggestion below:
+
+> "Anthropic recommends 1–3 worked examples for non-trivial outputs; this prompt has none. Drafting 2–3 examples often lifts quality 20–30% — want me to draft candidates?"
+
+Do not block iteration. The user may still proceed with the failure-pattern remedy or accept this recommendation instead.
 
 Then analyze low-scoring cases (score < 7). For each, classify the failure pattern using this table:
 

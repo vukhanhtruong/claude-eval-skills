@@ -37,7 +37,7 @@ from prompt_eval.anthropic_llm import AnthropicLLM
 def _chat(client, model, messages, system=None, temperature=1.0, stop_sequences=None):
     params = {
         "model": model,
-        "max_tokens": 1000,
+        "max_tokens": 8192,
         "messages": messages,
         "temperature": temperature,
         "stop_sequences": stop_sequences or [],
