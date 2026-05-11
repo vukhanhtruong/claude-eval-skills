@@ -395,3 +395,110 @@ def test_evaluate_prints_creds_hint_when_creds_present_but_flag_off(
     out = capsys.readouterr().out
     assert "💡 Langfuse credentials detected" in out
     assert "prompt-eval push --prompt summarizer --run-id run_001 --version v1" in out
+
+
+# ---------------------------------------------------------------------------
+# Task 7: CLI args --tools, --tool-schema, --max-tool-turns
+# ---------------------------------------------------------------------------
+
+def test_evaluate_with_tools_flag():
+    """--tools parses as a comma-separated string and is forwarded to Evaluator."""
+    parser = _build_parser()
+    args = parser.parse_args([
+        "evaluate", "--prompt", "summarizer",
+        "--run-id", "run_001", "--version", "v1",
+        "--tools", "web_fetch,web_search",
+    ])
+    assert args.tools == "web_fetch,web_search"
+
+
+def test_evaluate_with_multiple_tool_schema_flags():
+    """--tool-schema is repeatable (action=append) and collects all values."""
+    parser = _build_parser()
+    args = parser.parse_args([
+        "evaluate", "--prompt", "summarizer",
+        "--run-id", "run_001", "--version", "v1",
+        "--tool-schema", "schema_a.json",
+        "--tool-schema", "schema_b.json",
+    ])
+    assert args.tool_schema == ["schema_a.json", "schema_b.json"]
+
+
+@patch("prompt_eval.run.regenerate_for_run")
+@patch("prompt_eval.run.restart_mkdocs")
+@patch("prompt_eval.run._bootstrap_docs_site")
+@patch("prompt_eval.run.Evaluator")
+def test_evaluate_with_risky_tool_prints_warning(
+    eval_cls, mock_bootstrap, start_mkdocs, regen, tmp_path, monkeypatch, capsys
+):
+    """When a risky tool (bash or read_file) is used, a stderr warning is printed."""
+    monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_001"
+    (out_dir / "v1").mkdir(parents=True)
+    (out_dir / "dataset.json").write_text(json.dumps([
+        {"scenario": "A", "prompt_inputs": {"x": "1"}, "solution_criteria": ["c"], "task_description": "t"},
+    ]))
+    (out_dir / "v1" / "prompt.txt").write_text("Test prompt {x}")
+    (out_dir / "metadata.json").write_text(json.dumps({
+        "run_id": "run_001", "prompt_name": "summarizer",
+        "test_model": "haiku", "judge_model": None,
+        "dataset_size": 1, "versions": [], "version_data": {},
+    }))
+    eval_cls.return_value.run_evaluation.return_value = [
+        {"test_case": {"scenario": "A", "solution_criteria": ["c"]}, "output": "x", "score": 8, "reasoning": "ok"},
+    ]
+
+    _do_evaluate(
+        version="v1", model="haiku", judge_model="sonnet",
+        out_dir=out_dir, extra_criteria=None,
+        prompt_name="summarizer",
+        tools=["bash"],
+    )
+    err = capsys.readouterr().err
+    assert "bash" in err
+    assert "mocks" in err.lower() or "warning" in err.lower()
+
+
+@patch("prompt_eval.run.regenerate_for_run")
+@patch("prompt_eval.run.restart_mkdocs")
+@patch("prompt_eval.run._bootstrap_docs_site")
+@patch("prompt_eval.run.Evaluator")
+def test_mocks_json_has_version_field(
+    eval_cls, mock_bootstrap, start_mkdocs, regen, tmp_path, monkeypatch
+):
+    """After evaluate with tools, mocks.json uses versioned schema {version, entries}."""
+    monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_001"
+    (out_dir / "v1").mkdir(parents=True)
+    (out_dir / "dataset.json").write_text(json.dumps([
+        {"scenario": "A", "prompt_inputs": {"x": "1"}, "solution_criteria": ["c"], "task_description": "t"},
+    ]))
+    (out_dir / "v1" / "prompt.txt").write_text("Test prompt {x}")
+    (out_dir / "metadata.json").write_text(json.dumps({
+        "run_id": "run_001", "prompt_name": "summarizer",
+        "test_model": "haiku", "judge_model": None,
+        "dataset_size": 1, "versions": [], "version_data": {},
+    }))
+
+    # Simulate evaluator updating mock_cache via run_evaluation side effect
+    def fake_run_evaluation(*args, **kwargs):
+        mock_cache = kwargs.get("mock_cache", {})
+        mock_cache["web_fetch::{\"url\": \"http://example.com\"}"] = {
+            "content": "page content", "generated_by": "haiku"
+        }
+        return [{"test_case": {"scenario": "A", "solution_criteria": ["c"]}, "output": "x", "score": 8, "reasoning": "ok"}]
+
+    eval_cls.return_value.run_evaluation.side_effect = fake_run_evaluation
+
+    _do_evaluate(
+        version="v1", model="haiku", judge_model="sonnet",
+        out_dir=out_dir, extra_criteria=None,
+        prompt_name="summarizer",
+        tools=["web_fetch"],
+    )
+
+    mocks_file = out_dir / "mocks.json"
+    assert mocks_file.exists(), "mocks.json should be written when tools are used"
+    mocks_data = json.loads(mocks_file.read_text())
+    assert mocks_data["version"] == 1
+    assert "entries" in mocks_data

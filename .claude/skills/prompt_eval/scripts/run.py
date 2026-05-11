@@ -316,12 +316,59 @@ def _do_generate(
     print(f"Generated {len(dataset)} test cases at {out_dir / 'dataset.json'}")
 
 
+_MOCKS_VERSION = 1
+
+RISKY_TOOLS = {"bash", "read_file"}
+
+
+def _load_mocks(out_dir: Path) -> dict:
+    """Load versioned mocks.json; return the entries dict (empty if not found)."""
+    mocks_file = out_dir / "mocks.json"
+    if not mocks_file.exists():
+        return {}
+    raw = json.loads(mocks_file.read_text())
+    # Support both legacy flat dict and versioned {version, entries} schema
+    if isinstance(raw, dict) and "entries" in raw:
+        return raw["entries"]
+    # Legacy flat cache — migrate transparently
+    return raw
+
+
+def _save_mocks(out_dir: Path, entries: dict) -> None:
+    """Persist the mock cache with versioned schema."""
+    mocks_file = out_dir / "mocks.json"
+    mocks_file.write_text(json.dumps({"version": _MOCKS_VERSION, "entries": entries}, indent=2))
+
+
+def _build_tool_list(
+    tools: list[str] | None,
+    tool_schema: list[str] | None,
+) -> list[dict] | None:
+    """Resolve CLI tool names and schema files to a list of tool dicts."""
+    from prompt_eval.tool_schemas import get_builtin_schema
+
+    result = []
+    for name in (tools or []):
+        schema = get_builtin_schema(name)
+        if schema is None:
+            print(f"WARNING: unknown builtin tool '{name}' — skipped", file=sys.stderr)
+            continue
+        result.append(schema)
+    for path_str in (tool_schema or []):
+        schema = json.loads(Path(path_str).read_text())
+        result.append(schema)
+    return result or None
+
+
 def _do_evaluate(
     version: str, model: str, judge_model: str,
     out_dir: Path, extra_criteria: str | None,
     prompt_name: str,
     docs_site_dir: Path | None = None,
     push_to_langfuse: bool = False,
+    tools: list[str] | None = None,
+    tool_schema: list[str] | None = None,
+    max_tool_turns: int = 5,
 ) -> None:
     out_dir = Path(out_dir)
     meta_file = out_dir / "metadata.json"
@@ -386,9 +433,25 @@ def _do_evaluate(
             )
         on_case_complete = _push_case_callback
 
+    # Resolve tool list from CLI args; warn for risky tools before any LLM calls.
+    resolved_tools = _build_tool_list(tools, tool_schema)
+    if tools:
+        risky_used = [t for t in tools if t in RISKY_TOOLS]
+        for t in risky_used:
+            print(
+                f"⚠ Warning: '{t}' produces mocks that don't reflect actual execution. "
+                f"Scores may not be meaningful.",
+                file=sys.stderr,
+            )
+
+    # Load persisted mock cache (versioned schema).
+    mock_cache = _load_mocks(out_dir) if resolved_tools else {}
+
     evaluator = Evaluator(
         test_model=MODEL_MAP[model],
         judge_model=MODEL_MAP[judge_model],
+        tools=resolved_tools,
+        max_tool_turns=max_tool_turns,
     )
     results = evaluator.run_evaluation(
         dataset=dataset,
@@ -396,7 +459,12 @@ def _do_evaluate(
         output_file=str(out_dir / version / "output.json"),
         extra_criteria=extra_criteria,
         on_case_complete=on_case_complete,
+        mock_cache=mock_cache,
     )
+
+    # Persist updated mock cache if tools were used.
+    if resolved_tools:
+        _save_mocks(out_dir, mock_cache)
 
     # Ensure output.json is written (works for real + mocked run_evaluation).
     (out_dir / version / "output.json").write_text(json.dumps(results, indent=2))
@@ -618,6 +686,12 @@ def _build_parser() -> argparse.ArgumentParser:
     e.add_argument("--prompt", required=True, help="prompt name, e.g. summarizer")
     e.add_argument("--push-to-langfuse", action="store_true",
                    help="Also publish dataset, traces, and scores to Langfuse")
+    e.add_argument("--tools", default=None,
+                   help="Comma-separated builtin tool names, e.g. web_fetch,web_search")
+    e.add_argument("--tool-schema", action="append", default=None,
+                   help="Path to a custom tool schema JSON file (repeatable)")
+    e.add_argument("--max-tool-turns", type=int, default=5,
+                   help="Maximum agentic tool turns per test case (default: 5)")
 
     s = sub.add_parser("show", help="Print scoreboard for one (run, version)")
     s.add_argument("--run-id", required=True, help="e.g. run_001")
@@ -667,6 +741,7 @@ def main(argv: list | None = None) -> int:
     if args.cmd == "evaluate":
         runs_dir = _resolve_runs_dir(args.prompt)
         out_dir = runs_dir / args.run_id
+        tools_list = [t.strip() for t in args.tools.split(",")] if args.tools else None
         _do_evaluate(
             version=args.version,
             model=args.model,
@@ -676,6 +751,9 @@ def main(argv: list | None = None) -> int:
             prompt_name=args.prompt,
             docs_site_dir=artifact_root / "docs-site",
             push_to_langfuse=args.push_to_langfuse,
+            tools=tools_list,
+            tool_schema=args.tool_schema,
+            max_tool_turns=args.max_tool_turns,
         )
         return 0
     if args.cmd == "show":
