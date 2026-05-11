@@ -187,10 +187,14 @@ class Evaluator:
         test_model: str = "claude-haiku-4-5",
         judge_model: str = "claude-sonnet-4-6",
         max_concurrent_tasks: int = 3,
+        tools: list[dict] | None = None,
+        max_tool_turns: int = 5,
     ):
         self.test_model = test_model
         self.judge_model = judge_model
         self.max_concurrent_tasks = max_concurrent_tasks
+        self.tools = tools
+        self.max_tool_turns = max_tool_turns
         self.client = Anthropic()
 
     def run_test_case(self, test_case: dict, prompt_template: str) -> str:
@@ -201,6 +205,36 @@ class Evaluator:
             self.test_model,
             [{"role": "user", "content": rendered}],
         )
+
+    def run_test_case_with_tools(
+        self,
+        test_case: dict,
+        prompt_template: str,
+        task_context: str,
+        mock_cache: dict,
+    ) -> tuple[str, list[dict], dict]:
+        """Run a test case with tools enabled.
+        Note: mock_cache is mutated in place by ToolMocker.
+        """
+        from prompt_eval.tool_mocker import ToolMocker
+        from prompt_eval.agentic_runner import AgenticRunner
+
+        rendered = render_prompt(prompt_template, test_case["prompt_inputs"])
+        mocker = ToolMocker(
+            client=self.client,
+            task_context=task_context,
+            cache=mock_cache,
+        )
+        runner = AgenticRunner(
+            client=self.client,
+            model=self.test_model,
+            tools=self.tools,
+            mocker=mocker,
+            max_turns=self.max_tool_turns,
+        )
+        output, tool_log = runner.run(rendered, case_context=test_case)
+        mock_cache.update(mocker.cache)
+        return output, tool_log, mock_cache
 
     def grade_with_geval(
         self,
@@ -241,6 +275,8 @@ class Evaluator:
         on_case_complete: Optional[
             Callable[[int, dict, str, str, int, str, int], None]
         ] = None,
+        task_context: str = "",
+        mock_cache: dict | None = None,
     ) -> list:
         """Run + grade every case in the dataset; write JSON to output_file.
 
@@ -250,11 +286,19 @@ class Evaluator:
         submit time, stable under parallel execution). The callback may run
         from worker threads; callees must be thread-safe.
         """
+        shared_cache: dict = mock_cache if mock_cache is not None else {}
+
         def _process(indexed_case):
             index, case = indexed_case
             t0 = time.monotonic()
             rendered = render_prompt(prompt_template, case["prompt_inputs"])
-            output = self.run_test_case(case, prompt_template)
+            if self.tools:
+                output, tool_log, _ = self.run_test_case_with_tools(
+                    case, prompt_template, task_context, shared_cache
+                )
+            else:
+                output = self.run_test_case(case, prompt_template)
+                tool_log = None
             grade = self.grade_with_geval(case, output, extra_criteria)
             latency_ms = int((time.monotonic() - t0) * 1000)
             if on_case_complete is not None:
@@ -262,12 +306,15 @@ class Evaluator:
                     index, case, rendered, output,
                     grade["score"], grade["reasoning"], latency_ms,
                 )
-            return {
+            result = {
                 "test_case": case,
                 "output": output,
                 "score": grade["score"],
                 "reasoning": grade["reasoning"],
             }
+            if tool_log is not None:
+                result["tool_log"] = tool_log
+            return result
 
         results = []
         with concurrent.futures.ThreadPoolExecutor(
