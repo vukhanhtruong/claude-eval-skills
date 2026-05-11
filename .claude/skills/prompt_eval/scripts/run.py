@@ -19,6 +19,7 @@ os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "1")
 from prompt_eval.evaluator import MODEL_MAP, DatasetGenerator, Evaluator
 from prompt_eval.docs_generator import regenerate_for_run
 from prompt_eval import langfuse_push
+from prompt_eval.tool_schemas import is_builtin_tool
 
 
 MKDOCS_PORT = 8000
@@ -479,6 +480,16 @@ def _do_evaluate(
         "pass_rate": 100 * len([r for r in results if r["score"] >= 7]) / len(results),
     }
     metadata["latest_avg_score"] = round(avg, 1)
+
+    # Persist tools config for --resume
+    if resolved_tools:
+        metadata["tools"] = [
+            {"name": t["name"], "source": "builtin"} if is_builtin_tool(t["name"])
+            else {"name": t["name"], "source": "custom", "schema": t}
+            for t in resolved_tools
+        ]
+        metadata["max_tool_turns"] = max_tool_turns
+
     meta_file.write_text(json.dumps(metadata, indent=2))
 
     # Regenerate docs site (bootstrap from template on first evaluate per project)
