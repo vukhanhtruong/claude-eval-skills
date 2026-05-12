@@ -33,13 +33,19 @@ class AgenticRunner:
         tool_call_log: list[dict] = []
         response = None
 
-        for _ in range(self.max_turns):
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=8192,
-                messages=messages,
-                tools=self.tools,
-            )
+        for turn_idx in range(self.max_turns):
+            create_kwargs: dict = {
+                "model": self.model,
+                "max_tokens": 8192,
+                "messages": messages,
+                "tools": self.tools,
+            }
+            # Force tool use on first turn so Claude calls the tool instead of
+            # replying "I can't access external resources". Subsequent turns
+            # use default (auto) so Claude can finalize using the tool result.
+            if turn_idx == 0 and self.tools:
+                create_kwargs["tool_choice"] = {"type": "any"}
+            response = self.client.messages.create(**create_kwargs)
 
             if response.stop_reason == "end_turn":
                 return self._extract_text(response), tool_call_log

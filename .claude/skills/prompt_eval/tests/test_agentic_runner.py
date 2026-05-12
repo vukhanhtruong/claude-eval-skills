@@ -60,6 +60,32 @@ def test_run_handles_single_tool_call_with_case_context():
     assert tool_log[0]["tool"] == "web_fetch"
 
 
+def test_run_forces_tool_choice_on_first_turn_only():
+    """First turn must pass tool_choice={'type': 'any'} so Claude is forced to call a tool
+    instead of replying 'I can't access URLs'. Subsequent turns use default (auto) so Claude
+    can use the tool result to produce the final answer."""
+    client = MagicMock()
+    client.messages.create.side_effect = [
+        make_tool_use_response("web_fetch", "tool_123", {"url": "https://example.com"}),
+        make_text_response("Summary based on fetched content"),
+    ]
+    mock_cache = {'web_fetch::{"url": "https://example.com"}': {"content": "<html>...</html>", "generated_by": "haiku"}}
+    mocker = ToolMocker(client=None, task_context="test", cache=mock_cache)
+    tools = [{"name": "web_fetch", "description": "Fetch", "input_schema": {}}]
+    runner = AgenticRunner(client=client, model="claude-haiku-4-5", tools=tools, mocker=mocker)
+
+    runner.run("Summarize https://example.com", case_context={})
+
+    assert client.messages.create.call_count == 2
+    first_call_kwargs = client.messages.create.call_args_list[0].kwargs
+    second_call_kwargs = client.messages.create.call_args_list[1].kwargs
+
+    assert first_call_kwargs.get("tool_choice") == {"type": "any"}, \
+        "First turn must force tool use"
+    assert "tool_choice" not in second_call_kwargs, \
+        "Subsequent turns must use default (auto) so Claude can finalize"
+
+
 def test_run_respects_max_turns_limit():
     client = MagicMock()
     client.messages.create.return_value = make_tool_use_response("web_fetch", "tool_1", {"url": "https://loop.com"})
