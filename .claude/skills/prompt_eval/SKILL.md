@@ -1,7 +1,7 @@
 ---
 name: prompt_eval
 description: Build, test, and iteratively improve a Claude prompt with grounded coaching and empirical scoring. Walks the user through 5 steps applying Anthropic's prompt-engineering best practices, runs evaluations with DeepEval (Claude as judge), produces an MkDocs site, and proposes principle-grounded improvements.
-argument-hint: "[--prompt name] [--model haiku|sonnet|opus] [--judge-model haiku|sonnet|opus] [--cases N] [--resume run_NNN] [--list] [--list-prompts]"
+argument-hint: "[--prompt name] [--model haiku|sonnet|opus] [--judge-model haiku|sonnet|opus] [--cases N] [--resume run_NNN] [--list] [--list-prompts] [--tools web_fetch,web_search] [--max-tool-turns N]"
 allowed-tools: Read, Write, Edit, Bash
 ---
 
@@ -26,6 +26,9 @@ Parse `$ARGUMENTS`:
 - `--resume run_NNN` — reopen an existing run (within the chosen `--prompt`)
 - `--list` — list runs for the chosen `--prompt` and stop
 - `--list-prompts` — list every prompt namespace with run counts and stop
+- `--tools <list>` — comma-separated builtin tools to enable (e.g. `web_fetch,web_search`). When set, Claude can call these tools during evaluation and responses are mocked by Haiku. Builtins: `web_fetch`, `web_search`, `read_file`, `bash`.
+- `--tool-schema <path>` — path to a custom tool schema JSON file (repeatable). Use for MCP tools or any non-builtin tool.
+- `--max-tool-turns N` (default `5`) — maximum agentic turns per test case when tools are enabled
 
 If `--list-prompts`:
 ```bash
@@ -48,6 +51,7 @@ If `--resume {run_id}`:
 - Verify `prompt_eval_runs/prompts/{prompt}/runs/{run_id}/dataset.json` exists (relative to the user's project dir). If not, run `prompt-eval list-runs --prompt {prompt}` and ask the user to pick.
 - Read `prompt_eval_runs/prompts/{prompt}/runs/{run_id}/metadata.json`.
 - Print: dataset size, prior versions, prior average scores, models used.
+- If `metadata.json` contains `tools_config`, restore the tools settings for this session (tools list, max_tool_turns). Print: "Restoring tool config: --tools {tools} --max-tool-turns {N}"
 - Skip Steps 1 & 2 below; jump to Step 5 with the latest version's data.
 
 Otherwise, start fresh from Step 1. Auto-increment run number: count existing `prompt_eval_runs/prompts/{prompt}/runs/run_*` directories (relative to the user's project dir); the new one is `run_{count+1:03d}`.
@@ -64,6 +68,39 @@ Ask: "Describe the task in one specific sentence — what should Claude do?"
 
 **Coaching: WHEN task is vague (< 10 words, no specific verb, no output type):**
 > "Your task description is too broad — Claude needs specifics to perform well. What's the exact output you want? (a summary? a list? a rewrite?) What's the audience or purpose?"
+
+**Tool detection (ALWAYS run after Phase A — proactive, not optional):**
+
+Analyze the task description for signals that Claude needs external data:
+- **Explicit sources:** websites, URLs, domains (Hackernoon, Reddit, Twitter), APIs, MCP servers
+- **Real-time data needs:** stock prices, weather, sports scores, currency rates, news
+- **Current information:** "today's", "latest", "current", "now", "real-time"
+- **Dynamic queries:** database lookups, user accounts, inventory, bookings
+- **Domain-specific data:** flights, hotels, products, listings, market data
+
+**IF any signal matches → assume tools are needed. Don't ask permission. Make the assumption, show it, let user override.**
+
+> "This task needs external data Claude can't produce from training data alone. I'll assume the following tool setup — confirm or adjust:
+>
+> **Assumed tool:** `{inferred_tool_name}` (e.g. `get_stock_data`, `fetch_weather`, `web_fetch`)
+> **Why:** {brief justification — 'stock analysis needs real-time market data'}
+> **Mock strategy:** Haiku will generate realistic mock responses per test case (cached in `mocks.json`)
+>
+> Looks good? Or specify a different tool name?"
+
+Set `tools_needed = true` and carry the assumed tool config to Phase H.
+
+**Examples of tasks needing tools — assumption made by skill, not user:**
+| Task description | Skill assumes tool | Skill auto-generates |
+|---|---|---|
+| "Summarize AI news from Hackernoon" | `web_fetch` (builtin) | URL → article content |
+| "Get stock analysis for AAPL" | `get_stock_data` (custom) | Ticker → price/PE/volume |
+| "Find current weather in Tokyo" | `get_weather` (custom) | City → temp/conditions |
+| "Compare flight prices to NYC" | `search_flights` (custom) | Route → price list |
+| "Latest crypto prices for BTC, ETH" | `get_crypto_price` (custom) | Symbol → USD price |
+| "Summarize this article: [text]" | NO tools (content inline) | — |
+
+**The skill does the work, not the user:** detects need → assumes tool → drafts schema → mocks data. User only confirms or overrides.
 
 Optional follow-up: "Why does Claude need to do this? (Adding context helps Claude generalize.)"
 
@@ -131,6 +168,89 @@ If yes:
 - Free-form output → add "Think step by step before responding." or wrap reasoning in `<thinking>...</thinking>`.
 - Structured output (JSON/HTML) → keep reasoning inside `<thinking>` tags and add a final instruction: "After the `<thinking>` block, output ONLY the {format}."
 
+### Phase H: Tool setup (only if `tools_needed = true` from Phase A)
+
+If Phase A flagged `tools_needed = true`, proactively set up the tool config. **Do the work — don't ask the user to do it.**
+
+**Step 1: Classify the assumed tool**
+
+Check if the inferred tool name matches a builtin:
+- `web_fetch`, `web_search`, `read_file`, `bash` → use `--tools {name}` (no schema needed)
+- Anything else → custom tool, needs a schema
+
+**Step 2: For custom tools, auto-draft the schema**
+
+You (the skill orchestrator) have the task description and inferred tool name. Write the schema JSON file directly:
+
+Path: `prompt_eval_runs/prompts/{prompt}/tools/{tool_name}.json`
+
+Schema format (Anthropic tool spec):
+```json
+{
+  "name": "{tool_name}",
+  "description": "What this tool does (one sentence)",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "{param_name}": {"type": "string", "description": "..."}
+    },
+    "required": ["{param_name}"]
+  }
+}
+```
+
+Infer parameters from the task: "stock analysis" → `ticker` param; "weather" → `location`; "flight search" → `origin`, `destination`, `date`. Use the Write tool to create the file.
+
+Show the user the drafted schema:
+> "Drafted tool schema at `prompt_eval_runs/prompts/{prompt}/tools/{tool_name}.json`:
+> ```json
+> {drafted_schema}
+> ```
+> Looks right? Or edit the file and I'll re-read it."
+
+**Step 3: Confirm mock data strategy**
+
+> "During evaluation, when Claude calls `{tool_name}`, Haiku will generate realistic mock responses per test case. For example:
+>
+> Input: `{example_args_from_test_case}`
+> Mock output: `{example_mock_preview}`
+>
+> Mocks are cached in `mocks.json` so they're reproducible across versions."
+
+**Step 4: Store config for `generate` and `evaluate`**
+
+- Builtin tool: add `--tools {name}` to all subsequent commands
+- Custom tool: add `--tool-schema {path}` to all subsequent commands
+- Both flags can be combined (e.g. `--tools web_fetch --tool-schema custom.json`)
+
+**Example end-to-end for "Get stock analysis for AAPL":**
+
+```
+Phase A → assumes tool: get_stock_data, reason: needs real-time market data
+Phase H → drafts schema at prompt_eval_runs/prompts/stock_analyzer/tools/get_stock_data.json:
+{
+  "name": "get_stock_data",
+  "description": "Fetch current stock data including price, PE ratio, volume",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "ticker": {"type": "string", "description": "Stock ticker symbol"}
+    },
+    "required": ["ticker"]
+  }
+}
+
+→ evaluate command:
+uvx ... prompt-eval evaluate \
+  --tool-schema prompt_eval_runs/prompts/stock_analyzer/tools/get_stock_data.json \
+  ...
+
+→ Claude calls get_stock_data({"ticker": "AAPL"})
+→ ToolMocker generates: '{"price": 182.50, "pe": 28.5, "volume": 52M, "change": "+1.2%"}'
+→ Claude produces stock analysis based on the mocked data
+→ Mock cached in mocks.json for next version
+```
+
 ### Coaching: WHEN instructions contradict
 > "These conflict: '{a}' vs '{b}'. Resolve by picking one or describing the balance."
 
@@ -177,8 +297,16 @@ uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval evaluate \
   --model {model} \
   --judge-model {judge_model} \
   --run-id run_NNN \
+  [--tools web_fetch,web_search] \
+  [--tool-schema path/to/custom.json] \
+  [--max-tool-turns N] \
   [--push-to-langfuse]
 ```
+
+Include `--tools` and/or `--tool-schema` only if configured in Phase H. When tools are enabled:
+- Claude can call them during evaluation
+- `ToolMocker` generates realistic mock responses using Haiku (works for ANY tool, builtin or custom)
+- Mocks are cached in `mocks.json` for reproducibility across versions
 
 Stream output. When complete, the script auto-regenerates the docs site and starts `mkdocs serve` if it's not already running. The first invocation per project also bootstraps `prompt_eval_runs/docs-site/` from the bundled template.
 
