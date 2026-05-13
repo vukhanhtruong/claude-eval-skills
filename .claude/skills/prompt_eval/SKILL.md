@@ -119,13 +119,47 @@ Set `tools_needed = true` and carry the assumed tool config to Phase H. Proceed 
 
 Optional follow-up: "Why does Claude need to do this? (Adding context helps Claude generalize.)"
 
-### Phase B: Inputs (always)
+### Phase B: Inputs (conditional)
 
-Ask: "What variables will the prompt receive? List each as `name: description`."
+**Analyze task for data source pattern:**
 
-Decide the structure:
+| Pattern detected | Inputs needed | Signals |
+|------------------|---------------|---------|
+| Tool-fetched data | None | URL, site name, API, "from [source]", real-time keywords (latest, current, today's) |
+| User-provided data | Yes | "this", "my", "given", transform verbs with object (summarize this, convert my, analyze given) |
+| Ambiguous | Ask once | Neither pattern clear |
+
+**If no inputs needed (tool-fetched task):**
+> "No user inputs needed — the AI will fetch data via tools.
+> (Say 'add input' if you want to include any)"
+
+Proceed immediately to Phase C.
+
+**If inputs needed (user-provided task), show multiple choice:**
+> "These are the inputs your prompt will receive. Select which to include:"
+>
+> [ ] `{suggested_input_1}` — {description}
+> [ ] `{suggested_input_2}` — {description}
+> [ ] `{suggested_input_3}` — {description} (optional)
+> [ ] Other (specify your own)
+
+Pre-select the most likely required inputs. Wait for user selection.
+
+**Inference rules by task type:**
+
+| Task type | Suggested inputs |
+|-----------|------------------|
+| Summarize/analyze content | `content`, `max_length` |
+| Code review/fix | `code`, `language`, `context` |
+| Translation | `text`, `target_language` |
+| Data extraction | `source_data`, `fields_to_extract` |
+| Q&A/RAG | `question`, `context_documents` |
+| Comparison | `item_a`, `item_b`, `criteria` |
+
+**Structure decision (after inputs determined):**
+- 0 inputs → skip variable placeholders
 - 1 short input → use `{var}` inline
-- Multiple/long inputs → wrap them in a named XML block (e.g. `<athlete_information>...</athlete_information>`)
+- Multiple/long inputs → wrap in named XML block (e.g. `<article_content>...</article_content>`)
 
 ### Phase C: Output specification (always)
 
