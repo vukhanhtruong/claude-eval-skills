@@ -23,3 +23,12 @@ class DatasetHelper:
             elif not case["solution_criteria"]:
                 errors.append(f"Case {i}: 'solution_criteria' is empty")
         return errors
+
+    @staticmethod
+    def save(dataset: list[dict], path: Path) -> None:
+        """Validate and write dataset.json."""
+        errors = DatasetHelper.validate(dataset)
+        if errors:
+            raise ValueError(f"Invalid dataset: {errors}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(dataset, indent=2))

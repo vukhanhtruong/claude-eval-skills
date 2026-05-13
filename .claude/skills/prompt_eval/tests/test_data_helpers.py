@@ -33,3 +33,38 @@ class TestDatasetHelperValidate:
         dataset = [{"scenario": "Test", "prompt_inputs": {}, "solution_criteria": []}]
         errors = DatasetHelper.validate(dataset)
         assert "Case 0: 'solution_criteria' is empty" in errors
+
+
+class TestDatasetHelperSave:
+    def test_save_writes_valid_dataset(self, tmp_path):
+        dataset = [
+            {
+                "scenario": "Test",
+                "prompt_inputs": {"x": "y"},
+                "solution_criteria": ["C1"],
+            }
+        ]
+        path = tmp_path / "runs" / "run_001" / "dataset.json"
+        DatasetHelper.save(dataset, path)
+        assert path.exists()
+        import json
+        saved = json.loads(path.read_text())
+        assert saved == dataset
+
+    def test_save_creates_parent_dirs(self, tmp_path):
+        dataset = [
+            {
+                "scenario": "Test",
+                "prompt_inputs": {},
+                "solution_criteria": ["C1"],
+            }
+        ]
+        path = tmp_path / "deep" / "nested" / "dataset.json"
+        DatasetHelper.save(dataset, path)
+        assert path.exists()
+
+    def test_save_raises_on_invalid_dataset(self, tmp_path):
+        dataset = [{"scenario": "Test"}]  # missing fields
+        path = tmp_path / "dataset.json"
+        with pytest.raises(ValueError, match="Invalid dataset"):
+            DatasetHelper.save(dataset, path)
