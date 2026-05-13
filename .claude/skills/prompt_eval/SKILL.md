@@ -96,17 +96,14 @@ Analyze the task description for signals that Claude needs external data:
 - **Dynamic queries:** database lookups, user accounts, inventory, bookings
 - **Domain-specific data:** flights, hotels, products, listings, market data
 
-**IF any signal matches → assume tools are needed. Don't ask permission. Make the assumption, show it, let user override.**
+**IF any signal matches → assume tools are needed. Show brief status and proceed.**
 
-> "This task needs external data Claude can't produce from training data alone. I'll assume the following tool setup — confirm or adjust:
->
-> **Assumed tool:** `{inferred_tool_name}` (e.g. `get_stock_data`, `fetch_weather`, `web_fetch`)
-> **Why:** {brief justification — 'stock analysis needs real-time market data'}
-> **Mock strategy:** Haiku will generate realistic mock responses per test case (cached in `mocks.json`)
->
-> Looks good? Or specify a different tool name?"
+> "Detected tool need: `{inferred_tool_name}` ({brief justification}).
+> Mocks will be generated during evaluation."
 
-Set `tools_needed = true` and carry the assumed tool config to Phase H.
+Set `tools_needed = true` and carry the assumed tool config to Phase H. Proceed immediately to the next phase.
+
+**Override:** User can interrupt with "change tool to X" or "remove tools" at any point.
 
 **Examples of tasks needing tools — assumption made by skill, not user:**
 | Task description | Skill assumes tool | Skill auto-generates |
