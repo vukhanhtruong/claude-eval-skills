@@ -135,6 +135,8 @@ Optional follow-up: "Why does Claude need to do this? (Adding context helps Clau
 
 ### Phase B: Inputs (conditional)
 
+**If `tools_needed = true` (from Phase A tool detection), skip to "No user inputs needed" below — the tools will fetch the data.**
+
 **Analyze task for data source pattern:**
 
 | Pattern detected | Inputs needed | Signals |
@@ -318,6 +320,8 @@ uvx ... prompt-eval evaluate \
 **Mock strategy:** Haiku generates realistic responses per test case
 ---
 ```
+
+Show this summary above the assembled prompt as a pre-header to the user; do not include it in `prompt.txt`.
 
 Show the assembled prompt. Annotate which Anthropic principle each section serves. Ask:
 
