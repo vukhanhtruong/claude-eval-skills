@@ -49,3 +49,13 @@ class ResultsHelper:
             if "criteria_breakdown" not in s:
                 errors.append(f"Score {i}: missing 'criteria_breakdown'")
         return errors
+
+    @staticmethod
+    def aggregate(scores: list[dict]) -> dict:
+        """Calculate summary statistics."""
+        values = [s["score"] for s in scores]
+        return {
+            "average_score": round(sum(values) / len(values), 2),
+            "pass_rate": round(sum(1 for v in values if v >= 7) / len(values), 2),
+            "total_cases": len(values),
+        }

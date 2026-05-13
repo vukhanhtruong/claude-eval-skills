@@ -103,3 +103,31 @@ class TestResultsHelperValidate:
         scores = [{"case_index": 0, "score": 8, "reasoning": "X"}]
         errors = ResultsHelper.validate_scores(scores)
         assert "Score 0: missing 'criteria_breakdown'" in errors
+
+
+class TestResultsHelperAggregate:
+    def test_aggregate_calculates_average(self):
+        scores = [
+            {"score": 8, "reasoning": "X", "criteria_breakdown": {}},
+            {"score": 6, "reasoning": "X", "criteria_breakdown": {}},
+            {"score": 10, "reasoning": "X", "criteria_breakdown": {}},
+        ]
+        result = ResultsHelper.aggregate(scores)
+        assert result["average_score"] == 8.0
+
+    def test_aggregate_calculates_pass_rate(self):
+        scores = [
+            {"score": 8, "reasoning": "X", "criteria_breakdown": {}},  # pass
+            {"score": 6, "reasoning": "X", "criteria_breakdown": {}},  # fail
+            {"score": 7, "reasoning": "X", "criteria_breakdown": {}},  # pass
+        ]
+        result = ResultsHelper.aggregate(scores)
+        assert result["pass_rate"] == 0.67  # 2/3 rounded
+
+    def test_aggregate_includes_total_cases(self):
+        scores = [
+            {"score": 8, "reasoning": "X", "criteria_breakdown": {}},
+            {"score": 6, "reasoning": "X", "criteria_breakdown": {}},
+        ]
+        result = ResultsHelper.aggregate(scores)
+        assert result["total_cases"] == 2
