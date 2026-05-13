@@ -1,6 +1,6 @@
 import json
 import pytest
-from prompt_eval.data_helpers import DatasetHelper, ResultsHelper
+from prompt_eval.data_helpers import DatasetHelper, OutputHelper, ResultsHelper
 
 
 class TestDatasetHelperValidate:
@@ -158,3 +158,22 @@ class TestResultsHelperSave:
         path = tmp_path / "scores.json"
         with pytest.raises(ValueError, match="Invalid scores"):
             ResultsHelper.save(scores, "v1", path)
+
+
+class TestOutputHelper:
+    def test_save_writes_outputs(self, tmp_path):
+        outputs = [
+            {"case_index": 0, "output": "Response text", "tool_calls": []},
+            {"case_index": 1, "output": "Another response", "tool_calls": []},
+        ]
+        path = tmp_path / "v1" / "output.json"
+        OutputHelper.save(outputs, path)
+        assert path.exists()
+        saved = json.loads(path.read_text())
+        assert saved == outputs
+
+    def test_save_creates_parent_dirs(self, tmp_path):
+        outputs = [{"case_index": 0, "output": "X", "tool_calls": []}]
+        path = tmp_path / "deep" / "nested" / "output.json"
+        OutputHelper.save(outputs, path)
+        assert path.exists()

@@ -73,3 +73,13 @@ class ResultsHelper:
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(result, indent=2))
+
+
+class OutputHelper:
+    """Save prompt execution outputs."""
+
+    @staticmethod
+    def save(outputs: list[dict], path: Path) -> None:
+        """Write output.json."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(outputs, indent=2))
