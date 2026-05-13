@@ -101,7 +101,7 @@ Analyze the task description for signals that Claude needs external data:
 > "Detected tool need: `{inferred_tool_name}` ({brief justification}).
 > Mocks will be generated during evaluation."
 
-Set `tools_needed = true` and carry the assumed tool config to Phase H. Proceed immediately to the next phase.
+Set `tools_needed = true` and carry the assumed tool config to Phase H. Proceed immediately to Phase B (Inputs).
 
 **Override:** User can interrupt with "change tool to X" or "remove tools" at any point.
 
