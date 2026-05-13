@@ -59,3 +59,17 @@ class ResultsHelper:
             "pass_rate": round(sum(1 for v in values if v >= 7) / len(values), 2),
             "total_cases": len(values),
         }
+
+    @staticmethod
+    def save(scores: list[dict], version: str, path: Path) -> None:
+        """Validate, aggregate, and write scores.json."""
+        errors = ResultsHelper.validate_scores(scores)
+        if errors:
+            raise ValueError(f"Invalid scores: {errors}")
+        result = {
+            "version": version,
+            "cases": scores,
+            "summary": ResultsHelper.aggregate(scores),
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(result, indent=2))

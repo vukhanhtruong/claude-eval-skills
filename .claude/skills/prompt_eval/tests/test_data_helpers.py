@@ -131,3 +131,30 @@ class TestResultsHelperAggregate:
         ]
         result = ResultsHelper.aggregate(scores)
         assert result["total_cases"] == 2
+
+
+class TestResultsHelperSave:
+    def test_save_writes_scores_with_summary(self, tmp_path):
+        scores = [
+            {
+                "case_index": 0,
+                "scenario": "Test",
+                "score": 8,
+                "reasoning": "Good",
+                "criteria_breakdown": {"C1": "PASS"},
+            }
+        ]
+        path = tmp_path / "v1" / "scores.json"
+        ResultsHelper.save(scores, "v1", path)
+        assert path.exists()
+        saved = json.loads(path.read_text())
+        assert saved["version"] == "v1"
+        assert saved["cases"] == scores
+        assert "summary" in saved
+        assert saved["summary"]["average_score"] == 8.0
+
+    def test_save_raises_on_invalid_scores(self, tmp_path):
+        scores = [{"score": 8}]  # missing fields
+        path = tmp_path / "scores.json"
+        with pytest.raises(ValueError, match="Invalid scores"):
+            ResultsHelper.save(scores, "v1", path)
