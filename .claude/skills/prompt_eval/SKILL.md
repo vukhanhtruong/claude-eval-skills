@@ -219,7 +219,7 @@ If yes:
 
 ### Phase H: Tool setup (only if `tools_needed = true` from Phase A)
 
-If Phase A flagged `tools_needed = true`, proactively set up the tool config. **Do the work — don't ask the user to do it.**
+If Phase A flagged `tools_needed = true`, set up the tool config silently. **Do the work, log what you did, proceed without confirmation.**
 
 **Step 1: Classify the assumed tool**
 
@@ -250,27 +250,18 @@ Schema format (Anthropic tool spec):
 
 Infer parameters from the task: "stock analysis" → `ticker` param; "weather" → `location`; "flight search" → `origin`, `destination`, `date`. Use the Write tool to create the file.
 
-Show the user the drafted schema:
-> "Drafted tool schema at `prompt_eval_runs/prompts/{prompt}/tools/{tool_name}.json`:
-> ```json
-> {drafted_schema}
-> ```
-> Looks right? Or edit the file and I'll re-read it."
+Log the schema creation (no confirmation):
+> "Created tool schema: `prompt_eval_runs/prompts/{prompt}/tools/{tool_name}.json`"
 
-**Step 3: Confirm mock data strategy**
+Proceed immediately to Step 3.
 
-> "During evaluation, when Claude calls `{tool_name}`, Haiku will generate realistic mock responses per test case. For example:
->
-> Input: `{example_args_from_test_case}`
-> Mock output: `{example_mock_preview}`
->
-> Mocks are cached in `mocks.json` so they're reproducible across versions."
-
-**Step 4: Store config for `generate` and `evaluate`**
+**Step 3: Store config (silent)**
 
 - Builtin tool: add `--tools {name}` to all subsequent commands
 - Custom tool: add `--tool-schema {path}` to all subsequent commands
-- Both flags can be combined (e.g. `--tools web_fetch --tool-schema custom.json`)
+- Both flags can be combined
+
+**Override:** User can say "edit tool schema" to open the file for manual editing.
 
 **Example end-to-end for "Get stock analysis for AAPL":**
 
