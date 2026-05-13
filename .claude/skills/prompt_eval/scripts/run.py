@@ -728,15 +728,22 @@ def main(argv: list | None = None) -> int:
         print("mkdocs server stopped.")
         return 0
 
+    # Handle read-only commands gracefully on fresh projects (no prompt_eval_runs/ yet)
+    if args.cmd in ("list-prompts", "list-runs"):
+        try:
+            artifact_root = _resolve_artifact_root()
+            _migrate_legacy_layout(artifact_root)
+        except FileNotFoundError:
+            print("No prompts found." if args.cmd == "list-prompts" else "No runs found.")
+            return 0
+        if args.cmd == "list-prompts":
+            list_prompts(_resolve_prompts_dir())
+        else:
+            list_runs(_resolve_runs_dir(args.prompt))
+        return 0
+
     artifact_root = _resolve_artifact_root()
     _migrate_legacy_layout(artifact_root)
-
-    if args.cmd == "list-runs":
-        list_runs(_resolve_runs_dir(args.prompt))
-        return 0
-    if args.cmd == "list-prompts":
-        list_prompts(_resolve_prompts_dir())
-        return 0
     if args.cmd == "generate":
         runs_dir = _resolve_runs_dir(args.prompt)
         out_dir = runs_dir / args.run_id
