@@ -296,6 +296,13 @@ uvx ... prompt-eval evaluate \
 
 ### Final assembly
 
+**If tools are configured, include a tools summary section:**
+
+---
+**Tools enabled:** {tool_name} ({builtin or custom})
+**Mock strategy:** Haiku generates realistic responses per test case
+---
+
 Show the assembled prompt. Annotate which Anthropic principle each section serves. Ask:
 
 > "Use as-is, edit inline, paste your own, or restart wizard?"
