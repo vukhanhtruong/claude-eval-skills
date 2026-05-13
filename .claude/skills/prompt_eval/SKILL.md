@@ -43,9 +43,27 @@ uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-runs --prompt {prompt}
 Print output and stop.
 
 If `--prompt` is missing for any flow other than `--list-prompts`:
-- First, run `prompt-eval list-prompts` to show what's already in this project.
-- Ask the user: "Which prompt are you iterating on? Pick one of the above, or type a new name (lowercase letters, digits, `_`, `-` only)."
-- Use the user's answer as `--prompt` for the rest of the flow.
+
+**Auto-generate from task description:**
+1. Extract the task text from `$ARGUMENTS` (everything after flags).
+2. Remove stop words: `the`, `a`, `an`, `from`, `for`, `with`, `to`, `in`, `on`, `of`, `and`, `or`, `that`, `this`, `it`.
+3. Extract 2-4 key terms (prioritize nouns, verbs, proper nouns).
+4. Join with underscores, lowercase: e.g., `ai_news_hackernoon`.
+
+**Check for similar existing prompts:**
+1. Run `prompt-eval list-prompts`.
+2. For each existing prompt name, check if at least half the terms from the generated slug appear in it.
+3. If a similar prompt exists:
+   > "Found existing prompt '{name}' ({N} runs). Resume it or create '{generated_slug}'?"
+   
+   Wait for user response, then proceed.
+4. If no similar prompt exists:
+   > "Using prompt name: {generated_slug}"
+   
+   Proceed immediately.
+
+**Fallback:** If `$ARGUMENTS` contains no task text or fewer than 3 words after stop-word removal, fall back to asking:
+> "What prompt are you iterating on? Type a name (lowercase letters, digits, `_`, `-` only)."
 
 If `--resume {run_id}`:
 - Verify `prompt_eval_runs/prompts/{prompt}/runs/{run_id}/dataset.json` exists (relative to the user's project dir). If not, run `prompt-eval list-runs --prompt {prompt}` and ask the user to pick.
