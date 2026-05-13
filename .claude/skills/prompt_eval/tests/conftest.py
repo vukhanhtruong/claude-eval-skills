@@ -1,6 +1,28 @@
 """Shared pytest fixtures for prompt_eval tests."""
+import sys
+import types
 from unittest.mock import MagicMock, patch
 import pytest
+
+# Stub out optional heavy dependencies that are not installed in the dev venv.
+# These modules are only needed at runtime (evaluate/generate commands); unit
+# tests for the other CLI commands should not require them.
+def _stub_module(name: str) -> types.ModuleType:
+    mod = types.ModuleType(name)
+    sys.modules[name] = mod
+    return mod
+
+for _name in ("anthropic", "deepeval", "deepeval.metrics", "deepeval.test_case",
+              "deepeval.models", "langfuse"):
+    if _name not in sys.modules:
+        _m = _stub_module(_name)
+        # Provide the specific names imported by the source modules.
+        _m.Anthropic = MagicMock
+        _m.GEval = MagicMock
+        _m.LLMTestCase = MagicMock
+        _m.LLMTestCaseParams = MagicMock
+        _m.DeepEvalBaseLLM = MagicMock
+        _m.Langfuse = MagicMock
 
 
 @pytest.fixture

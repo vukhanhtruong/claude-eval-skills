@@ -20,6 +20,7 @@ from prompt_eval.evaluator import MODEL_MAP, DatasetGenerator, Evaluator
 from prompt_eval.docs_generator import regenerate_for_run
 from prompt_eval import langfuse_push
 from prompt_eval.tool_schemas import is_builtin_tool
+from prompt_eval.data_helpers import DatasetHelper, OutputHelper, ResultsHelper
 
 
 MKDOCS_PORT = 8000
@@ -671,6 +672,15 @@ def _do_show(out_dir: Path, version: str, json_output: bool = False) -> None:
         print()
 
 
+def _do_save_dataset(prompt_name: str, run_id: str, json_data: str) -> None:
+    """Validate and save dataset.json."""
+    dataset = json.loads(json_data)
+    root = _resolve_artifact_root()
+    path = root / "prompts" / prompt_name / "runs" / run_id / "dataset.json"
+    DatasetHelper.save(dataset, path)
+    print(f"Saved dataset to {path}")
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="prompt-eval")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -717,6 +727,12 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="single version to push; omit to push all versions")
 
     sub.add_parser("stop-server", help="Stop the mkdocs serve process")
+
+    save_dataset_parser = sub.add_parser("save-dataset", help="Save dataset.json")
+    save_dataset_parser.add_argument("--prompt", required=True)
+    save_dataset_parser.add_argument("--run-id", required=True)
+    save_dataset_parser.add_argument("--json", required=True, dest="json_data")
+
     return p
 
 
@@ -783,6 +799,9 @@ def main(argv: list | None = None) -> int:
         runs_dir = _resolve_runs_dir(args.prompt)
         out_dir = runs_dir / args.run_id
         _do_push(out_dir=out_dir, prompt_name=args.prompt, version=args.version)
+        return 0
+    if args.cmd == "save-dataset":
+        _do_save_dataset(args.prompt, args.run_id, args.json_data)
         return 0
     return 1
 
