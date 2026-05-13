@@ -44,7 +44,21 @@ Print output and stop.
 
 If `--prompt` is missing for any flow other than `--list-prompts`:
 
-**Auto-generate from task description:**
+**If `--resume` is present but `--prompt` is missing:**
+
+List all existing prompts with:
+```bash
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval list-prompts
+```
+
+Ask:
+> "Which prompt does `{run_id}` belong to? (Use the name from the list above)"
+
+Wait for user response, then verify that `prompt_eval_runs/prompts/{prompt}/runs/{run_id}/dataset.json` exists. If not, list the runs for that prompt and ask the user to pick a valid run ID.
+
+Once `--prompt` is known, proceed to the resume flow below.
+
+**Otherwise, auto-generate from task description:**
 1. Extract the task text from `$ARGUMENTS` (everything after flags).
 2. Remove stop words: `the`, `a`, `an`, `from`, `for`, `with`, `to`, `in`, `on`, `of`, `and`, `or`, `that`, `this`, `it`.
 3. Extract 2-4 key terms (prioritize nouns, verbs, proper nouns).
