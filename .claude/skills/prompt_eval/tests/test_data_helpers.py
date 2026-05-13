@@ -1,5 +1,6 @@
+import json
 import pytest
-from prompt_eval.data_helpers import DatasetHelper
+from prompt_eval.data_helpers import DatasetHelper, ResultsHelper
 
 
 class TestDatasetHelperValidate:
@@ -68,3 +69,37 @@ class TestDatasetHelperSave:
         path = tmp_path / "dataset.json"
         with pytest.raises(ValueError, match="Invalid dataset"):
             DatasetHelper.save(dataset, path)
+
+
+class TestResultsHelperValidate:
+    def test_valid_scores_returns_empty_errors(self):
+        scores = [
+            {
+                "case_index": 0,
+                "score": 8,
+                "reasoning": "Good output",
+                "criteria_breakdown": {"C1": "PASS"},
+            }
+        ]
+        errors = ResultsHelper.validate_scores(scores)
+        assert errors == []
+
+    def test_missing_score_returns_error(self):
+        scores = [{"case_index": 0, "reasoning": "X", "criteria_breakdown": {}}]
+        errors = ResultsHelper.validate_scores(scores)
+        assert "Score 0: invalid score" in errors
+
+    def test_score_out_of_range_returns_error(self):
+        scores = [{"case_index": 0, "score": 11, "reasoning": "X", "criteria_breakdown": {}}]
+        errors = ResultsHelper.validate_scores(scores)
+        assert "Score 0: invalid score" in errors
+
+    def test_missing_reasoning_returns_error(self):
+        scores = [{"case_index": 0, "score": 8, "criteria_breakdown": {}}]
+        errors = ResultsHelper.validate_scores(scores)
+        assert "Score 0: missing 'reasoning'" in errors
+
+    def test_missing_criteria_breakdown_returns_error(self):
+        scores = [{"case_index": 0, "score": 8, "reasoning": "X"}]
+        errors = ResultsHelper.validate_scores(scores)
+        assert "Score 0: missing 'criteria_breakdown'" in errors

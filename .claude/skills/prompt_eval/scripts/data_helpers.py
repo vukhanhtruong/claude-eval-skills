@@ -32,3 +32,20 @@ class DatasetHelper:
             raise ValueError(f"Invalid dataset: {errors}")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(dataset, indent=2))
+
+
+class ResultsHelper:
+    """Validate, aggregate, and save evaluation results."""
+
+    @staticmethod
+    def validate_scores(scores: list[dict]) -> list[str]:
+        """Return list of validation errors."""
+        errors = []
+        for i, s in enumerate(scores):
+            if "score" not in s or not (1 <= s.get("score", 0) <= 10):
+                errors.append(f"Score {i}: invalid score")
+            if "reasoning" not in s:
+                errors.append(f"Score {i}: missing 'reasoning'")
+            if "criteria_breakdown" not in s:
+                errors.append(f"Score {i}: missing 'criteria_breakdown'")
+        return errors
