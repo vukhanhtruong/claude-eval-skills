@@ -672,6 +672,15 @@ def _do_show(out_dir: Path, version: str, json_output: bool = False) -> None:
         print()
 
 
+def _do_save_output(prompt_name: str, run_id: str, version: str, json_data: str) -> None:
+    """Save output.json."""
+    outputs = json.loads(json_data)
+    root = _resolve_artifact_root()
+    path = root / "prompts" / prompt_name / "runs" / run_id / version / "output.json"
+    OutputHelper.save(outputs, path)
+    print(f"Saved outputs to {path}")
+
+
 def _do_save_dataset(prompt_name: str, run_id: str, json_data: str) -> None:
     """Validate and save dataset.json."""
     dataset = json.loads(json_data)
@@ -732,6 +741,12 @@ def _build_parser() -> argparse.ArgumentParser:
     save_dataset_parser.add_argument("--prompt", required=True)
     save_dataset_parser.add_argument("--run-id", required=True)
     save_dataset_parser.add_argument("--json", required=True, dest="json_data")
+
+    save_output_parser = sub.add_parser("save-output", help="Save output.json")
+    save_output_parser.add_argument("--prompt", required=True)
+    save_output_parser.add_argument("--run-id", required=True)
+    save_output_parser.add_argument("--version", required=True)
+    save_output_parser.add_argument("--json", required=True, dest="json_data")
 
     return p
 
@@ -802,6 +817,9 @@ def main(argv: list | None = None) -> int:
         return 0
     if args.cmd == "save-dataset":
         _do_save_dataset(args.prompt, args.run_id, args.json_data)
+        return 0
+    if args.cmd == "save-output":
+        _do_save_output(args.prompt, args.run_id, args.version, args.json_data)
         return 0
     return 1
 
