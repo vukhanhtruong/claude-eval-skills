@@ -135,3 +135,26 @@ class TestCloneForCrossvalCommand:
                 "--from-run-id", "run_001", "--from-version", "v1",
                 "--test-model", "sonnet", "--judge-model", "opus",
             ])
+
+    def test_clone_refreshes_docs_for_both_source_and_new_run(
+        self, tmp_path, monkeypatch
+    ):
+        src = self._setup_source_run(tmp_path)
+        monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+        calls: list[tuple[str, str]] = []
+        from prompt_eval import run as run_module
+        monkeypatch.setattr(
+            run_module, "_refresh_docs",
+            lambda prompt, run_id: calls.append((prompt, run_id)),
+        )
+        rc = main([
+            "clone-for-crossval", "--prompt", "demo",
+            "--from-run-id", "run_001", "--from-version", "v1",
+            "--test-model", "sonnet", "--judge-model", "opus",
+        ])
+        assert rc == 0
+        # Source refreshed first so its "Cross-validations:" footer reflects the
+        # new sibling; new run refreshed second so its banner appears.
+        assert calls == [("demo", "run_001"), ("demo", "run_002")]
+        # Defensive: make sure the clone itself still happened.
+        assert (src.parent / "run_002" / "metadata.json").exists()

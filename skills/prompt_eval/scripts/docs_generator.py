@@ -325,7 +325,11 @@ def _load_version_results(version_dir) -> list:
             })
         return results
 
-    # Legacy: output.json contains combined records
+    # Legacy: output.json contains combined records.
+    # Returns [] for an unevaluated version (e.g. a freshly cloned run that
+    # has prompt.txt but no output.json yet).
+    if not output_path.exists():
+        return []
     return json.loads(output_path.read_text())
 
 

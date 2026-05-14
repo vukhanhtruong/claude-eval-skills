@@ -433,6 +433,8 @@ def _do_clone_for_crossval(
     MetadataHelper.write(new_run, {"run_id": new_run_id, "versions": ["v1"]})
     MetadataHelper.set_models(new_run, test_model, judge_model)
     MetadataHelper.set_cross_validation_link(new_run, from_run_id, from_version)
+    _refresh_docs(prompt_name, from_run_id)
+    _refresh_docs(prompt_name, new_run_id)
     print(
         f"Cloned {prompt_name}/{from_run_id}/{from_version} → "
         f"{prompt_name}/{new_run_id} (test={test_model}, judge={judge_model})"
