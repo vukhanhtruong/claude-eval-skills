@@ -242,6 +242,17 @@ def update_mkdocs_nav(
     config_path.write_text(yaml.safe_dump(cfg, sort_keys=False))
 
 
+def _crossval_banner(metadata: dict) -> str:
+    cv = metadata.get("cross_validation_of")
+    if not cv:
+        return ""
+    src_run, src_ver = cv["run_id"], cv["version"]
+    return (
+        f"> ← **Cross-validation of** [{src_run}/{src_ver}]"
+        f"(../{src_run}/{src_ver}.md)\n\n"
+    )
+
+
 def render_summary_page(run_id: str, metadata: dict, versions: list) -> str:
     """Render the per-run summary (links to versions, models used, dataset link)."""
     rows = []
@@ -250,16 +261,7 @@ def render_summary_page(run_id: str, metadata: dict, versions: list) -> str:
         avg = _mean(scores) if scores else 0
         rows.append(f"| [{v['label']}]({v['label']}.md) | {avg:.1f}/10 | {len(scores)} |")
     table = "\n".join(rows)
-
-    banner = ""
-    cv = metadata.get("cross_validation_of")
-    if cv:
-        src_run = cv["run_id"]
-        src_ver = cv["version"]
-        banner = (
-            f"> ← **Cross-validation of** [{src_run}/{src_ver}]"
-            f"(../{src_run}/{src_ver}.md)\n\n"
-        )
+    banner = _crossval_banner(metadata)
 
     return f"""{_HIDE_TOC_FRONT_MATTER}# Run {run_id} — Summary
 

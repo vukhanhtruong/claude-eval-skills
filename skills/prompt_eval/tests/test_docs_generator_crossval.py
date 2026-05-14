@@ -16,7 +16,6 @@ class TestCrossValBanner:
         }
         page = render_summary_page("run_002", meta, versions=[])
         assert "Cross-validation of" in page
-        assert "run_001" in page
-        assert "v3" in page
+        assert "[run_001/v3](../run_001/v3.md)" in page
         # Banner appears before the test-model line so it's the first thing users see.
         assert page.index("Cross-validation of") < page.index("Test model")
