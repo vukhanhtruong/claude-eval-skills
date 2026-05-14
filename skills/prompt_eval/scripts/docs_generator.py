@@ -253,7 +253,23 @@ def _crossval_banner(metadata: dict) -> str:
     )
 
 
-def render_summary_page(run_id: str, metadata: dict, versions: list) -> str:
+def _crossval_footer(cross_validations: list | None) -> str:
+    if not cross_validations:
+        return ""
+    items = "\n".join(
+        f"- [{cv['run_id']}](../{cv['run_id']}/index.md) "
+        f"— `test={cv.get('test_model', '?')}, judge={cv.get('judge_model', '?')}`"
+        for cv in cross_validations
+    )
+    return f"\n\n---\n**Cross-validations:**\n\n{items}\n"
+
+
+def render_summary_page(
+    run_id: str,
+    metadata: dict,
+    versions: list,
+    cross_validations: list | None = None,
+) -> str:
     """Render the per-run summary (links to versions, models used, dataset link)."""
     rows = []
     for v in versions:
@@ -262,8 +278,9 @@ def render_summary_page(run_id: str, metadata: dict, versions: list) -> str:
         rows.append(f"| [{v['label']}]({v['label']}.md) | {avg:.1f}/10 | {len(scores)} |")
     table = "\n".join(rows)
     banner = _crossval_banner(metadata)
+    footer = _crossval_footer(cross_validations)
 
-    return f"""{_HIDE_TOC_FRONT_MATTER}# Run {run_id} — Summary
+    body = f"""{_HIDE_TOC_FRONT_MATTER}# Run {run_id} — Summary
 
 {banner}**Test model:** `{metadata.get('test_model', '?')}`  &nbsp;
 **Judge model:** `{metadata.get('judge_model', '?')}`
@@ -274,6 +291,7 @@ def render_summary_page(run_id: str, metadata: dict, versions: list) -> str:
 
 [View full comparison](comparison.md){{: .md-button }}
 """
+    return body + footer
 
 
 def _load_version_results(version_dir) -> list:
@@ -311,6 +329,24 @@ def _load_version_results(version_dir) -> list:
     return json.loads(output_path.read_text())
 
 
+def _find_cross_validations(run_dir: Path) -> list[dict]:
+    """Return metadata for sibling runs whose cross_validation_of points at run_dir."""
+    runs_dir = run_dir.parent
+    this_run_id = run_dir.name
+    siblings = []
+    for sib in sorted(runs_dir.iterdir()):
+        if not sib.is_dir() or sib == run_dir:
+            continue
+        meta_path = sib / "metadata.json"
+        if not meta_path.exists():
+            continue
+        meta = json.loads(meta_path.read_text())
+        cv = meta.get("cross_validation_of")
+        if cv and cv.get("run_id") == this_run_id:
+            siblings.append(meta)
+    return siblings
+
+
 def regenerate_for_run(run_dir, docs_root, mkdocs_yml, prompt_name: str) -> None:
     """Read run_dir/{metadata,outputs}, write Markdown to docs_root, update nav.
 
@@ -335,7 +371,10 @@ def regenerate_for_run(run_dir, docs_root, mkdocs_yml, prompt_name: str) -> None
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Summary
-    (out_dir / "index.md").write_text(render_summary_page(run_id, metadata, versions))
+    cross_validations = _find_cross_validations(run_dir)
+    (out_dir / "index.md").write_text(
+        render_summary_page(run_id, metadata, versions, cross_validations)
+    )
 
     # Per-version pages
     for v in versions:
