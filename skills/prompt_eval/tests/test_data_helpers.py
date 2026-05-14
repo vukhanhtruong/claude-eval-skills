@@ -177,3 +177,64 @@ class TestOutputHelper:
         path = tmp_path / "deep" / "nested" / "output.json"
         OutputHelper.save(outputs, path)
         assert path.exists()
+
+    def test_validate_accepts_minimal_payload(self):
+        # tool_calls is optional; only case_index + output are required
+        errors = OutputHelper.validate([{"case_index": 0, "output": "x"}])
+        assert errors == []
+
+    def test_validate_rejects_scoring_keys(self):
+        outputs = [
+            {"case_index": 0, "output": "x", "score": 9, "reasoning": "ok"}
+        ]
+        errors = OutputHelper.validate(outputs)
+        assert len(errors) == 1
+        assert "scoring keys" in errors[0]
+        assert "'reasoning'" in errors[0]
+        assert "'score'" in errors[0]
+
+    def test_validate_rejects_test_case_and_scenario(self):
+        outputs = [
+            {
+                "case_index": 0,
+                "output": "x",
+                "test_case": {"scenario": "..."},
+                "scenario": "...",
+            }
+        ]
+        errors = OutputHelper.validate(outputs)
+        assert any("scoring keys" in e for e in errors)
+        assert any("'test_case'" in e for e in errors)
+        assert any("'scenario'" in e for e in errors)
+
+    def test_validate_requires_case_index_and_output(self):
+        errors = OutputHelper.validate([{}])
+        assert len(errors) == 1
+        assert "missing required keys" in errors[0]
+        assert "'case_index'" in errors[0]
+        assert "'output'" in errors[0]
+
+    def test_validate_reports_each_case_separately(self):
+        outputs = [
+            {"case_index": 0, "output": "valid"},
+            {"case_index": 1, "output": "x", "score": 8},
+            {"output": "missing case_index"},
+        ]
+        errors = OutputHelper.validate(outputs)
+        assert len(errors) == 2
+        assert "Output 1" in errors[0]
+        assert "Output 2" in errors[1]
+
+    def test_save_raises_on_scoring_keys_and_skips_write(self, tmp_path):
+        outputs = [
+            {"case_index": 0, "output": "x", "criteria_breakdown": {}}
+        ]
+        path = tmp_path / "v1" / "output.json"
+        with pytest.raises(ValueError, match="scoring keys"):
+            OutputHelper.save(outputs, path)
+        assert not path.exists()
+
+    def test_save_raises_on_missing_required_keys(self, tmp_path):
+        path = tmp_path / "v1" / "output.json"
+        with pytest.raises(ValueError, match="missing required keys"):
+            OutputHelper.save([{"case_index": 0}], path)

@@ -424,7 +424,12 @@ For each test case in `dataset.json`:
 4. If tools are enabled and you need external data, generate a realistic mock response
 5. Collect the output
 
-After executing all cases, save outputs:
+After executing all cases, save outputs.
+
+**The `output` field MUST be the model's complete response, verbatim.** Do not summarize, truncate, paraphrase, or extract bullet points — the eval is invalid without the raw text. If a case produced 2,000 chars of model output, pass 2,000 chars. A short summary is a regression.
+
+**Pass ONLY these keys per case:** `case_index`, `output`, `tool_calls`. Do NOT include `score`, `reasoning`, `criteria_breakdown`, `test_case`, or `scenario` — those belong to `save-scores` (Step 3b) and only there. The CLI rejects payloads that carry scoring keys.
+
 ```bash
 uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval save-output \
   --prompt {prompt} \
