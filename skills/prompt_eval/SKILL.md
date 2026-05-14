@@ -128,12 +128,25 @@ The "Not worth asking" column re-opens decisions the user has already made. If p
 
 **Tool detection (ALWAYS run after Phase A — proactive, not optional):**
 
-Analyze the task description for signals that Claude needs external data:
+Analyze the task description for signals that Claude needs an external capability — data fetching, generative output, or multimodal input:
+
+*Data-fetching signals:*
 - **Explicit sources:** websites, URLs, domains (Hackernoon, Reddit, Twitter), APIs, MCP servers
 - **Real-time data needs:** stock prices, weather, sports scores, currency rates, news
 - **Current information:** "today's", "latest", "current", "now", "real-time"
 - **Dynamic queries:** database lookups, user accounts, inventory, bookings
 - **Domain-specific data:** flights, hotels, products, listings, market data
+
+*Generative-output signals (output is a non-text artifact):*
+- **Image:** "generate / create / render / draw / produce an image", "make a picture", "visualize"
+- **Audio / speech:** "generate audio", "synthesize speech", "text-to-speech"
+- **Video:** "generate / create a video", "animate"
+- **Charts / code execution:** "plot", "render a chart", "calculate", "compute"
+
+*Multimodal-input signals (input is non-text):*
+- **Image input:** "[portrait / photo / picture / screenshot / image] URL", "analyze this image", "given an image of"
+- **Audio input:** "transcribe this audio", "from the recording"
+- **Document input:** "from this PDF", "analyze the attached document"
 
 **IF any signal matches → silently set `tools_needed = true` and stash the inferred tool name(s) for Phase H. Do NOT surface this to the user.** Mock-tool plumbing is an evaluation-harness implementation detail; the user is building a portable prompt that will be pasted into whichever LLM/tool they choose, and that target tool will route its own tool use based on whatever tools it has available. The skill mocks tools only to verify the prompt works during evaluation.
 
@@ -148,6 +161,10 @@ Proceed immediately to Phase B (Inputs).
 | "Compare flight prices to NYC" | `search_flights` (custom) | Route → price list |
 | "Latest crypto prices for BTC, ETH" | `get_crypto_price` (custom) | Symbol → USD price |
 | "Summarize this article: [text]" | NO tools (content inline) | — |
+| "Generate an image of a sunset over Tokyo" | `image_generation` (custom) | Prompt → mock image URL |
+| "Recommend 3 hairstyles from a portrait URL" | `image_input` + `image_generation` | URL → portrait features; prompt → mock rendered image |
+| "Transcribe this voicemail recording" | `audio_input` (custom) | URL → transcript |
+| "Render a chart of Q3 sales" | `code_execution` (builtin) | Data → mock chart |
 
 ### Phase B: Inputs (conditional)
 
@@ -329,8 +346,12 @@ The prompt.txt the user will copy elsewhere must describe *what input arrives* a
 
 | | Example |
 |---|---|
-| ✅ Good | "You are given a portrait image and asked to recommend 3 hairstyles suited to the subject's face shape. Produce ..." |
-| ❌ Bad  | "1. Call `web_fetch` on `{portrait_url}` to retrieve the portrait. 2. If the fetch fails ..." |
+| ✅ Good (don't script tools) | "You are given a portrait image and asked to recommend 3 hairstyles suited to the subject's face shape. Produce ..." |
+| ❌ Bad (scripts the tool) | "1. Call `web_fetch` on `{portrait_url}` to retrieve the portrait. 2. If the fetch fails ..." |
+| ✅ Good (output spec = artifact) | "Output 3 photorealistic hairstyle images, each showing the subject with the new style applied." |
+| ❌ Bad (output spec = blueprint) | "For each style, output a detailed DALL·E prompt as text." |
+
+**Second principle: specify the artifact, not a description of how to make it.** If the task is "generate an image," the output spec must be "an image" — not "a text prompt that would generate an image." Modern LLMs auto-route to image generation when (a) the prompt asks for an image and (b) an image tool is available. The blueprint-as-text pattern silently degrades the deliverable from image → text-about-image, even when the target tool could have rendered it.
 
 The tool schema (used only during evaluation) lives separately under `tools/{tool_name}.json`. It tells the eval harness what mocks to generate — it is not the user's concern and never appears in `prompt.txt`.
 
