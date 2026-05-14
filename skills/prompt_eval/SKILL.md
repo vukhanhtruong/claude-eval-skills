@@ -400,6 +400,8 @@ Output as a JSON array. Example:
 ]
 ```
 
+**If you drafted the dataset (the user did not supply samples), confirm before saving.** Show the drafted cases as a numbered markdown list. For each case, render the `input` (truncate to ~200 chars + `…` if longer) and the full `solution_criteria` text. Then ask via `AskUserQuestion` with three options: **Approve** (proceed to `save-dataset`), **Request changes** (next user message describes what to change — drop cases, adjust criteria, add edge cases — then redraft and re-ask), **Start over** (scrap the draft, ask one or two fresh requirement questions, then redraft). Only call `save-dataset` after Approve. This gate does **not** fire when the user provided sample inputs directly.
+
 After generating, save via CLI:
 ```bash
 uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval save-dataset \
@@ -409,6 +411,24 @@ uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval save-dataset \
 ```
 
 Read `prompt_eval_runs/prompts/{prompt}/runs/{run_id}/dataset.json` and show the user a summary of each test case.
+
+---
+
+## Step 2.5 — Lock models before evaluation
+
+Before running the prompt against the dataset, show and lock the models that will be used. Defaults: `test_model=haiku`, `judge_model=sonnet`. If the user named different models earlier in this conversation, use those instead.
+
+Ask via `AskUserQuestion` with two options: **Proceed (test=haiku, judge=sonnet)** and **Customize**. On Customize, the user's next message names new models — accept the values verbatim.
+
+Then call `set-models` to persist the choice and lock it:
+
+```bash
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval set-models \
+  --prompt <prompt_name> --run-id <run_id> \
+  --test-model <test_model> --judge-model <judge_model>
+```
+
+After this, every `save-output` and `save-scores` call MUST pass `--model <name>` matching the locked value, else the CLI rejects the write. Pass the test model on `save-output` and the judge model on `save-scores`.
 
 ---
 
@@ -523,20 +543,31 @@ Use this table to suggest improvements:
 
 ## Step 5 — Apply improvement
 
-Offer:
-> a) Apply Claude's #1 suggested fix (show diff first)
-> b) Add a few-shot example built from a failed case
-> c) Provide your own revised prompt
-> d) Done
+After scores are shown for v{n}, ask via `AskUserQuestion`:
+- **Iterate the prompt** — propose v{n+1} based on the lowest-scoring cases (existing behavior).
+- **Cross-validate with different models** — spawn a sibling run that re-uses the dataset and current prompt version, but with new models. Ask the user for `test_model` and `judge_model` (offer a sensible flip — e.g. if they used `test=haiku, judge=sonnet`, suggest `test=sonnet, judge=sonnet`). Then:
 
-If a/b/c chosen:
+```bash
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval clone-for-crossval \
+  --prompt <prompt_name> --from-run-id <current_run_id> --from-version v{n} \
+  --test-model <new_test_model> --judge-model <new_judge_model>
+```
+
+  The CLI prints the new `run_NNN`. Resume the skill flow against that new run starting at Step 3a (execute v1 of the new run, then grade). The dataset and prompt are already in place.
+- **Done** — stop here.
+
+If Iterate the prompt:
+- Offer:
+  > a) Apply Claude's #1 suggested fix (show diff first)
+  > b) Add a few-shot example built from a failed case
+  > c) Provide your own revised prompt
 - Compute the next version label `v{n+1}`.
 - Save the new prompt to `prompt_eval_runs/prompts/{prompt}/runs/run_NNN/v{n+1}/prompt.txt` (create parent dirs as needed).
 - Run Step 3 with `--version v{n+1}`.
 - Run Step 4.
 - Loop back to Step 5.
 
-If d) Done:
+If Done:
 - Stop the mkdocs server:
 ```bash
 uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval stop-server
