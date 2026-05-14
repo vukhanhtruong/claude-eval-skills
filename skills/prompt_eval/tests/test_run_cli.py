@@ -66,3 +66,75 @@ class TestSetModelsCommand:
         meta = MetadataHelper.read(run_dir)
         assert meta["test_model"] == "sonnet"
         assert meta["judge_model"] == "opus"
+
+
+import shutil
+
+
+class TestCloneForCrossvalCommand:
+    def _setup_source_run(self, tmp_path, prompt="demo"):
+        run_dir = _setup_run(tmp_path, prompt=prompt, run_id="run_001")
+        # Seed v1 prompt.txt and metadata that the clone command will read.
+        version_dir = run_dir / "v1"
+        version_dir.mkdir()
+        (version_dir / "prompt.txt").write_text("You are a helpful assistant.")
+        meta = MetadataHelper.read(run_dir)
+        meta["versions"] = ["v1"]
+        MetadataHelper.write(run_dir, meta)
+        return run_dir
+
+    def test_clone_creates_new_run_with_copied_dataset_and_prompt(
+        self, tmp_path, monkeypatch
+    ):
+        src = self._setup_source_run(tmp_path)
+        monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+        rc = main([
+            "clone-for-crossval", "--prompt", "demo",
+            "--from-run-id", "run_001", "--from-version", "v1",
+            "--test-model", "sonnet", "--judge-model", "opus",
+        ])
+        assert rc == 0
+        new_run = src.parent / "run_002"
+        assert new_run.exists()
+        assert (new_run / "dataset.json").read_bytes() == (src / "dataset.json").read_bytes()
+        assert (new_run / "v1" / "prompt.txt").read_text() == "You are a helpful assistant."
+        meta = MetadataHelper.read(new_run)
+        assert meta["run_id"] == "run_002"
+        assert meta["versions"] == ["v1"]
+        assert meta["test_model"] == "sonnet"
+        assert meta["judge_model"] == "opus"
+        assert meta["models_locked"] is True
+        assert meta["cross_validation_of"] == {"run_id": "run_001", "version": "v1"}
+
+    def test_clone_allocates_next_free_run_id(self, tmp_path, monkeypatch):
+        src = self._setup_source_run(tmp_path)
+        # Pre-create run_002 to force allocator to pick run_003.
+        (src.parent / "run_002").mkdir()
+        monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+        rc = main([
+            "clone-for-crossval", "--prompt", "demo",
+            "--from-run-id", "run_001", "--from-version", "v1",
+            "--test-model", "sonnet", "--judge-model", "opus",
+        ])
+        assert rc == 0
+        assert (src.parent / "run_003").exists()
+
+    def test_clone_raises_when_source_run_missing(self, tmp_path, monkeypatch):
+        _setup_run(tmp_path)  # creates run_001 but no v1/prompt.txt
+        monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+        with pytest.raises(FileNotFoundError):
+            main([
+                "clone-for-crossval", "--prompt", "demo",
+                "--from-run-id", "run_999", "--from-version", "v1",
+                "--test-model", "sonnet", "--judge-model", "opus",
+            ])
+
+    def test_clone_raises_when_source_version_missing(self, tmp_path, monkeypatch):
+        _setup_run(tmp_path)
+        monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+        with pytest.raises(FileNotFoundError, match="prompt.txt"):
+            main([
+                "clone-for-crossval", "--prompt", "demo",
+                "--from-run-id", "run_001", "--from-version", "v1",
+                "--test-model", "sonnet", "--judge-model", "opus",
+            ])

@@ -344,6 +344,17 @@ def _do_save_dataset(prompt_name: str, run_id: str, json_data: str) -> None:
     print(f"Saved dataset to {path}")
 
 
+def _next_run_id(runs_dir: Path) -> str:
+    """Return the next free run_NNN id, scanning existing dirs."""
+    existing = {
+        d.name for d in runs_dir.iterdir() if d.is_dir() and d.name.startswith("run_")
+    }
+    n = 1
+    while f"run_{n:03d}" in existing:
+        n += 1
+    return f"run_{n:03d}"
+
+
 def _update_metadata(run_dir: Path, version: str, run_id: str) -> None:
     """Ensure metadata.json exists in run_dir and the version is registered."""
     meta_path = run_dir / "metadata.json"
@@ -398,6 +409,36 @@ def _do_set_models(
     print(f"Locked models for {prompt_name}/{run_id}: test={test_model}, judge={judge_model}")
 
 
+def _do_clone_for_crossval(
+    prompt_name: str,
+    from_run_id: str,
+    from_version: str,
+    test_model: str,
+    judge_model: str,
+) -> None:
+    root = _resolve_artifact_root()
+    runs_dir = root / "prompts" / prompt_name / "runs"
+    src_run = runs_dir / from_run_id
+    src_prompt = src_run / from_version / "prompt.txt"
+    src_dataset = src_run / "dataset.json"
+    if not src_prompt.exists():
+        raise FileNotFoundError(f"Source prompt.txt not found: {src_prompt}")
+    if not src_dataset.exists():
+        raise FileNotFoundError(f"Source dataset.json not found: {src_dataset}")
+    new_run_id = _next_run_id(runs_dir)
+    new_run = runs_dir / new_run_id
+    (new_run / "v1").mkdir(parents=True)
+    shutil.copy2(src_dataset, new_run / "dataset.json")
+    shutil.copy2(src_prompt, new_run / "v1" / "prompt.txt")
+    MetadataHelper.write(new_run, {"run_id": new_run_id, "versions": ["v1"]})
+    MetadataHelper.set_models(new_run, test_model, judge_model)
+    MetadataHelper.set_cross_validation_link(new_run, from_run_id, from_version)
+    print(
+        f"Cloned {prompt_name}/{from_run_id}/{from_version} → "
+        f"{prompt_name}/{new_run_id} (test={test_model}, judge={judge_model})"
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="prompt-eval")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -441,6 +482,16 @@ def _build_parser() -> argparse.ArgumentParser:
     set_models_parser.add_argument("--run-id", required=True)
     set_models_parser.add_argument("--test-model", required=True)
     set_models_parser.add_argument("--judge-model", required=True)
+
+    clone_parser = sub.add_parser(
+        "clone-for-crossval",
+        help="Create a sibling run with the same dataset/prompt but new models",
+    )
+    clone_parser.add_argument("--prompt", required=True)
+    clone_parser.add_argument("--from-run-id", required=True)
+    clone_parser.add_argument("--from-version", required=True)
+    clone_parser.add_argument("--test-model", required=True)
+    clone_parser.add_argument("--judge-model", required=True)
 
     return p
 
@@ -489,6 +540,15 @@ def main(argv: list | None = None) -> int:
         return 0
     if args.cmd == "set-models":
         _do_set_models(args.prompt, args.run_id, args.test_model, args.judge_model)
+        return 0
+    if args.cmd == "clone-for-crossval":
+        _do_clone_for_crossval(
+            args.prompt,
+            args.from_run_id,
+            args.from_version,
+            args.test_model,
+            args.judge_model,
+        )
         return 0
     return 1
 
