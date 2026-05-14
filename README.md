@@ -1,148 +1,137 @@
-# Claude Eval Skills
+# Claude Eval Plugin
 
-A collection of Claude Code skills for evaluating LLM applications end-to-end: prompts, RAG pipelines, tool calls, and agents. Built for prompt engineers, AI builders, and teams who want a repeatable loop of "edit → eval → see scores → improve" instead of vibes-based iteration.
+A Claude Code plugin for evaluating and iterating on prompts. Built for prompt engineers and AI builders who want a repeatable loop of "edit, eval, see scores, improve" instead of vibes-based iteration.
 
-## What are Skills?
+**No API key required** — Claude Code performs all LLM work natively (dataset generation, prompt execution, grading).
 
-Skills are markdown files plus optional supporting code that give AI agents specialized knowledge and workflows for specific tasks. When you add these skills to your project, Claude Code recognizes evaluation tasks and walks you through structured workflows grounded in Anthropic's best practices and standard eval methodology (DeepEval, RAGAS-style retrieval metrics, trajectory scoring, etc.).
+## What's Included
 
-## Available Skills
-
-| Skill | Description | Status |
-|-------|-------------|--------|
-| [prompt_eval](.claude/skills/prompt_eval/README.md) | Build, test, and improve a Claude prompt. Walks 5 coaching steps, generates a test dataset, runs DeepEval with Claude-as-judge, produces an MkDocs site, and (optionally) pushes results to Langfuse. | Available |
-| `rag_eval` | Evaluate retrieval quality (recall, precision, MRR) and answer quality (faithfulness, context relevance, answer correctness) for RAG pipelines. | Planned |
-| `tool_eval` | Evaluate tool selection accuracy, argument correctness, and multi-step tool-call trajectories. | Planned |
-| `agent_eval` | End-to-end agent evals — planning, multi-turn task completion, trajectory scoring, side-effect verification. | Planned |
+| Component | Description |
+|-----------|-------------|
+| `/prompt-eval:prompt_eval` | Skill that walks you through 5 coaching steps, generates test datasets, grades outputs with Claude-as-judge, and produces an MkDocs site |
+| `llm-judge` agent | GEval grading subagent spawned in parallel for fast, consistent scoring |
 
 ## Installation
 
-**Prerequisites:** [Node.js](https://nodejs.org/en/download) (for `npx`), [uv](https://docs.astral.sh/uv/) (skills may invoke Python via `uvx`), and an Anthropic API key in `ANTHROPIC_API_KEY`. Per-skill requirements (e.g. Langfuse credentials) are documented in each skill's README.
-
-### Option 1: CLI Install (Recommended)
+**Prerequisites:** [Node.js](https://nodejs.org/en/download) (for `npx`), [uv](https://docs.astral.sh/uv/) (the skill invokes Python via `uvx`)
 
 ```bash
-# See what's available in the repo (no install)
-npx skills add vukhanhtruong/claude-eval-skill --list
-
-# Interactive: prompts you to pick which skills to install
-npx skills add vukhanhtruong/claude-eval-skill --agent claude-code
-
-# Install a specific skill only (project-level)
-npx skills add vukhanhtruong/claude-eval-skill --skill prompt_eval --agent claude-code -y
-
-# Install everything in the repo, globally, no prompts
-npx skills add vukhanhtruong/claude-eval-skill --agent claude-code -g --all
-
-# List installed / global skills
-npx skills list
-npx skills list --global
+npx plugins add vukhanhtruong/claude-eval-skill
 ```
 
-> **Pass `--agent claude-code`** so files land in `.claude/skills/` (where Claude Code looks). Without it the CLI installs to the universal `.agents/skills/` path, which Claude Code does not read. To target multiple agents at once, use `--agent '*'`.
+Then restart Claude Code or run `/reload-plugins`.
 
-> Tip: as more skills land in this repo (`rag_eval`, `tool_eval`, `agent_eval`), `--skill <name>` lets you pull in just the ones you need.
-
-### Option 2: Manual Install
+### Alternative: Local Testing
 
 ```bash
-# Clone and copy to project skills folder
+# Clone and test locally
 git clone https://github.com/vukhanhtruong/claude-eval-skill.git
-mkdir -p .claude/skills
-cp -r claude-eval-skill/.claude/skills/prompt_eval .claude/skills/
-```
-
-Or for global use across all projects:
-
-```bash
-mkdir -p ~/.claude/skills
-cp -r claude-eval-skill/.claude/skills/prompt_eval ~/.claude/skills/
+claude --plugin-dir ./claude-eval-skill
 ```
 
 ### Uninstall
 
 ```bash
-# Interactive remove (pick which to uninstall)
-npx skills remove
+# Via Claude Code
+/plugin uninstall prompt-eval
 
-# Remove a specific skill
-npx skills remove --skill prompt_eval -y
-
-# Remove everything from this repo, globally
-npx skills remove -g --all
-
-# Or remove the directory directly
-rm -rf .claude/skills/prompt_eval         # project install
-rm -rf ~/.claude/skills/prompt_eval       # global install
+# Or remove manually
+rm -rf ~/.claude/plugins/cache/vukhanhtruong-claude-eval-skill
 ```
-
-> First `uvx`-backed invocation of the skill takes ~30–90s while it builds the Python package; subsequent calls are sub-second.
-
-## Supported AI Agents
-
-These skills target:
-
-- **Claude Code** (CLI) — primary target; each skill ships its own slash command and `SKILL.md`
-- Other Claude Code-compatible agents that read `.claude/skills/`
-
-Skill-specific CLIs are just Python entry points, so they can also be invoked directly from any environment with `uv` installed (see each skill's README for examples).
 
 ## Usage
 
-Once installed, invoke a skill via its slash command in Claude Code, or call the CLI directly. See each skill's README for details:
+```bash
+# Start a new evaluation run
+/prompt-eval:prompt_eval --prompt summarizer
 
-- [prompt_eval](.claude/skills/prompt_eval/README.md) — `/prompt_eval` workflow, CLI usage, examples
+# List all prompts you've evaluated
+/prompt-eval:prompt_eval --list-prompts
 
-## Why These Skills Matter
+# List runs for a specific prompt
+/prompt-eval:prompt_eval --prompt summarizer --list
+
+# Resume an existing run (add new version)
+/prompt-eval:prompt_eval --prompt summarizer --resume run_001
+```
+
+The skill guides you through:
+1. **Guided prompt building** — coaching grounded in Anthropic best practices
+2. **Dataset generation** — Claude creates test cases with explicit success criteria
+3. **Prompt execution + grading** — parallel `llm-judge` subagents score each case
+4. **Results analysis** — scores table, failure patterns, suggested fixes
+5. **Iteration** — apply fixes, re-run, compare versions
+
+## How Grading Works
+
+The plugin uses **GEval methodology** (ported from DeepEval) with Claude as judge:
+
+1. Each test case has explicit `solution_criteria`
+2. The `llm-judge` agent evaluates each criterion: PASS (1.0) / PARTIAL (0.5) / FAIL (0.0)
+3. Scores are averaged and scaled to 1-10
+4. Parallel execution: 3 test cases grade simultaneously
+
+No external API calls — grading runs inside Claude Code via subagents.
+
+## Artifacts
+
+Each run produces versioned artifacts:
+
+```
+<project>/prompt_eval_runs/
+├── prompts/<prompt_name>/runs/run_NNN/
+│   ├── dataset.json        # test cases (locked at v1)
+│   ├── metadata.json       # run metadata
+│   └── v1/
+│       ├── prompt.txt      # the prompt being tested
+│       ├── output.json     # execution results
+│       └── scores.json     # grading results
+└── docs-site/              # auto-generated MkDocs site
+    └── ...
+```
+
+The MkDocs site auto-starts after first grading, letting you browse and compare versions.
+
+## Plugin Structure
+
+```
+claude-eval-skill/
+├── .claude-plugin/
+│   └── plugin.json         # plugin manifest
+├── skills/
+│   └── prompt_eval/        # the main skill
+│       ├── SKILL.md
+│       ├── scripts/        # Python CLI for validation/aggregation
+│       └── tests/
+└── agents/
+    └── llm-judge.md        # GEval grading subagent
+```
+
+## Development
+
+```bash
+cd skills/prompt_eval
+uv sync
+uv run pytest              # 81 tests
+```
+
+## Why This Plugin
 
 **The Problem:**
-- Prompt, RAG, and agent iteration without measurement is vibes-based — improvements feel real but don't survive new inputs
-- Rolling your own eval harness is yak-shaving; most teams skip it
-- "Did v3 actually beat v2?" is hard to answer without versioned artifacts and shared scoring
+- Prompt iteration without measurement is vibes-based
+- "Did v3 actually beat v2?" is hard to answer without versioned artifacts
+- External eval tools require API keys and complex setup
 
 **The Solution:**
-- Skill-per-eval-type so you only install what you need (`prompt_eval` today; `rag_eval`, `tool_eval`, `agent_eval` next)
-- Grounded coaching tied to named techniques (Anthropic's for prompts; RAGAS-style for retrieval; trajectory scoring for tools/agents)
-- Versioned artifacts + regenerable docs sites so v1→v3 comparisons are one click away
-- Optional Langfuse push for team review, dashboards, and dataset-run history
-
-**The Results:**
-- Faster iteration with empirical signal at every step
-- Catch regressions before they ship — pass-rate / score is computed per version
-- Shareable artifacts (MkDocs + Langfuse) so eval work isn't trapped in one engineer's terminal
-
-## Repo Layout
-
-```
-.claude/skills/
-└── <skill-name>/         # one folder per skill
-    ├── SKILL.md          # slash-command + step-by-step instructions (machine-readable)
-    ├── README.md         # human docs for this skill
-    ├── pyproject.toml    # optional Python entry point
-    ├── scripts/          # optional source code
-    └── tests/            # optional test suite
-```
-
-Each skill's docs (usage, examples, artifact layout) live next to the skill itself — see the **Available Skills** table for links.
-
-## Contributing
-
-PRs and issues welcome — for bug reports, new coaching prompts, new eval skills, or doc clarifications.
-
-### Ways to Contribute
-- Improve an existing skill's coaching, scoring, or examples
-- Propose a new skill (open an issue first to scope it)
-- Add tests under each skill's `tests/` folder
-- Report bugs or unclear steps
-
-See each skill's README for skill-specific contribution notes and how to run its test suite.
+- Claude Code does all LLM work natively — no API key needed
+- Versioned artifacts + MkDocs site for easy comparison
+- Parallel grading with explicit criteria (not black-box scoring)
+- Coaching grounded in Anthropic's prompt engineering best practices
 
 ## License
 
-MIT License — use these skills however you want.
+MIT License
 
-## About
+## Keywords
 
-A collection of Claude Code skills for grounded, measurable LLM evaluation — prompts today, RAG / tools / agents next. Coaching from Anthropic best practices, scoring from DeepEval, artifacts in MkDocs, optional Langfuse push.
-
-**Keywords:** prompt engineering, prompt evaluation, RAG evaluation, tool evaluation, agent evaluation, DeepEval, Claude, Anthropic, LLM evals, Langfuse, MkDocs, Claude Code, AI agent skill
+prompt engineering, prompt evaluation, Claude Code, Anthropic, LLM evals, GEval, MkDocs, Claude Code plugin
