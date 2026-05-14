@@ -11,7 +11,7 @@ A Claude Code plugin for evaluating LLM applications: prompts, RAG pipelines, to
 ### User-level (personal use)
 
 ```bash
-npx plugins add vukhanhtruong/claude-eval-skill
+npx plugins add vukhanhtruong/claude-eval-plugin
 ```
 
 Then restart Claude Code or run `/reload-plugins`.
@@ -19,7 +19,7 @@ Then restart Claude Code or run `/reload-plugins`.
 ### Project-level (scoped to one project)
 
 ```bash
-npx plugins add vukhanhtruong/claude-eval-skill --scope project
+npx plugins add vukhanhtruong/claude-eval-plugin
 ```
 
 Plugin only loads when you're in that project directory. Teammates need to run the same command.
@@ -30,10 +30,10 @@ For sharing the plugin via your repo:
 
 ```bash
 # Option 1: Clone directly
-git clone https://github.com/vukhanhtruong/claude-eval-skill.git .claude-plugins/prompt-eval
+git clone https://github.com/vukhanhtruong/claude-eval-plugin.git .claude-plugins/prompt-eval
 
 # Option 2: Git submodule (easier updates)
-git submodule add https://github.com/vukhanhtruong/claude-eval-skill.git .claude-plugins/prompt-eval
+git submodule add https://github.com/vukhanhtruong/claude-eval-plugin.git .claude-plugins/prompt-eval
 ```
 
 Then add to `.claude/settings.json`:
@@ -48,12 +48,12 @@ Teammates just need to clone/pull - no extra install step.
 
 ## Available Skills
 
-| Skill | Description | Status |
-|-------|-------------|--------|
-| [prompt_eval](skills/prompt_eval/README.md) | Build, test, and improve a Claude prompt. 5 coaching steps, test dataset generation, Claude-as-judge grading, MkDocs site for results. | Available |
-| `rag_eval` | Evaluate retrieval quality (recall, precision, MRR) and answer quality (faithfulness, context relevance, answer correctness) for RAG pipelines. | Planned |
-| `tool_eval` | Evaluate tool selection accuracy, argument correctness, and multi-step tool-call trajectories. | Planned |
-| `agent_eval` | End-to-end agent evals — planning, multi-turn task completion, trajectory scoring, side-effect verification. | Planned |
+| Skill                                       | Description                                                                                                                                     | Status    |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| [prompt_eval](skills/prompt_eval/README.md) | Build, test, and improve a Claude prompt. 5 coaching steps, test dataset generation, Claude-as-judge grading, MkDocs site for results.          | Available |
+| `rag_eval`                                  | Evaluate retrieval quality (recall, precision, MRR) and answer quality (faithfulness, context relevance, answer correctness) for RAG pipelines. | Planned   |
+| `tool_eval`                                 | Evaluate tool selection accuracy, argument correctness, and multi-step tool-call trajectories.                                                  | Planned   |
+| `agent_eval`                                | End-to-end agent evals — planning, multi-turn task completion, trajectory scoring, side-effect verification.                                    | Planned   |
 
 ## Quick Start
 
@@ -70,7 +70,7 @@ See each skill's README for detailed usage.
 ## Plugin Structure
 
 ```
-claude-eval-skill/
+claude-eval-plugin/
 ├── .claude-plugin/
 │   └── plugin.json         # plugin manifest
 ├── skills/

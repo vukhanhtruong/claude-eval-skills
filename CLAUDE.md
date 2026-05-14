@@ -9,7 +9,7 @@ A Claude Code **plugin** providing the `/prompt-eval:prompt_eval` skill and `llm
 ## Architecture
 
 ```
-claude-eval-skill/                 # plugin root
+claude-eval-plugin/                 # plugin root
 ├── .claude-plugin/
 │   └── plugin.json                # plugin manifest (name, version, description)
 ├── skills/
@@ -67,13 +67,13 @@ The skill invokes Python via `uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval ...`.
 
 **Option 1: Local testing (development)**
 ```bash
-claude --plugin-dir ./path/to/claude-eval-skill
+claude --plugin-dir ./path/to/claude-eval-plugin
 ```
 
 **Option 2: Install from GitHub**
 ```bash
 # In Claude Code:
-/plugin install vukhanhtruong/claude-eval-skill
+/plugin install vukhanhtruong/claude-eval-plugin
 ```
 
 After installation, the skill is available as `/prompt-eval:prompt_eval` and the `llm-judge` agent appears in `/agents`.
