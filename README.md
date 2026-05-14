@@ -6,13 +6,41 @@ A Claude Code plugin for evaluating LLM applications: prompts, RAG pipelines, to
 
 ## Installation
 
+**Prerequisites:** [Node.js](https://nodejs.org/en/download) (for `npx`), [uv](https://docs.astral.sh/uv/) (skills invoke Python via `uvx`)
+
+### User-level (personal use)
+
 ```bash
 npx plugins add vukhanhtruong/claude-eval-skill
 ```
 
 Then restart Claude Code or run `/reload-plugins`.
 
-**Prerequisites:** [Node.js](https://nodejs.org/en/download) (for `npx`), [uv](https://docs.astral.sh/uv/) (skills invoke Python via `uvx`)
+### Project-level (team sharing)
+
+For committing the plugin with your repo:
+
+```bash
+# Option 1: Clone directly
+git clone https://github.com/vukhanhtruong/claude-eval-skill.git .claude-plugins/prompt-eval
+
+# Option 2: Git submodule (easier updates)
+git submodule add https://github.com/vukhanhtruong/claude-eval-skill.git .claude-plugins/prompt-eval
+```
+
+Then add to `.claude/settings.json`:
+
+```json
+{
+  "plugins": [".claude-plugins/prompt-eval"]
+}
+```
+
+Or load manually:
+
+```bash
+claude --plugin-dir .claude-plugins/prompt-eval
+```
 
 ## Available Skills
 
