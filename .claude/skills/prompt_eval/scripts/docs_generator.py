@@ -49,6 +49,14 @@ def _scenario_title(scenario: str) -> str:
         return scenario[:50]
 
 
+def _render_criteria_breakdown(breakdown: dict) -> str:
+    """Render criteria breakdown dict as compact inline text."""
+    if not breakdown:
+        return ""
+    parts = [f"{k}: {v}" for k, v in breakdown.items()]
+    return "<br>".join(parts)
+
+
 def render_version_page(version_label: str, prompt_text: str, results: list) -> str:
     """Render one version's Markdown page (prompt + per-case results table)."""
     scores = [r["score"] for r in results]
@@ -57,12 +65,19 @@ def render_version_page(version_label: str, prompt_text: str, results: list) -> 
         100 * len([s for s in scores if s >= 7]) / len(scores) if scores else 0
     )
     rows = []
+    has_breakdown = any(r.get("criteria_breakdown") for r in results)
+    header = "| Scenario | Score | Reasoning | Criteria |" if has_breakdown else "| Scenario | Score | Reasoning |"
+    sep = "|---|---|---|---|" if has_breakdown else "|---|---|---|"
     for i, r in enumerate(results):
         scenario_fmt = _format_scenario(r['test_case']['scenario'])
         output_link = f'<a href="#output-{i+1}">▶ output</a>'
+        breakdown_cell = (
+            f" {_render_criteria_breakdown(r.get('criteria_breakdown', {}))} |"
+            if has_breakdown else ""
+        )
         rows.append(
             f"| {scenario_fmt}<br>{output_link} | {score_badge(r['score'])} | "
-            f"{r['reasoning']} |"
+            f"{r['reasoning']} |{breakdown_cell}"
         )
 
     table = "\n".join(rows)
@@ -90,8 +105,8 @@ def render_version_page(version_label: str, prompt_text: str, results: list) -> 
 
 ## Per-case results
 
-| Scenario | Score | Reasoning |
-|---|---|---|
+{header}
+{sep}
 {table}
 
 ## Outputs
@@ -249,6 +264,41 @@ def render_summary_page(run_id: str, metadata: dict, versions: list) -> str:
 """
 
 
+def _load_version_results(version_dir) -> list:
+    """Load per-case results for one version directory.
+
+    Supports two layouts:
+    - New (scores.json + output.json): merges scores and outputs by case_index.
+    - Legacy (output.json only): returns the combined records as-is.
+    """
+    from pathlib import Path as _Path
+    version_dir = _Path(version_dir)
+    scores_path = version_dir / "scores.json"
+    output_path = version_dir / "output.json"
+
+    if scores_path.exists():
+        scores_data = json.loads(scores_path.read_text())
+        cases = scores_data.get("cases", scores_data) if isinstance(scores_data, dict) else scores_data
+        outputs_by_index = {}
+        if output_path.exists():
+            outputs = json.loads(output_path.read_text())
+            for o in outputs:
+                outputs_by_index[o.get("case_index", 0)] = o.get("output", "")
+        results = []
+        for i, case in enumerate(cases):
+            results.append({
+                "test_case": {"scenario": case.get("scenario", "")},
+                "score": case["score"],
+                "reasoning": case["reasoning"],
+                "criteria_breakdown": case.get("criteria_breakdown", {}),
+                "output": outputs_by_index.get(case.get("case_index", i), ""),
+            })
+        return results
+
+    # Legacy: output.json contains combined records
+    return json.loads(output_path.read_text())
+
+
 def regenerate_for_run(run_dir, docs_root, mkdocs_yml, prompt_name: str) -> None:
     """Read run_dir/{metadata,outputs}, write Markdown to docs_root, update nav.
 
@@ -266,7 +316,7 @@ def regenerate_for_run(run_dir, docs_root, mkdocs_yml, prompt_name: str) -> None
     versions = []
     for label in version_labels:
         prompt_text = (run_dir / label / "prompt.txt").read_text()
-        results = json.loads((run_dir / label / "output.json").read_text())
+        results = _load_version_results(run_dir / label)
         versions.append({"label": label, "prompt": prompt_text, "results": results})
 
     out_dir = docs_root / "prompts" / prompt_name / "runs" / run_id

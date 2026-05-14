@@ -1,5 +1,5 @@
 """Tests for score-badge HTML and per-version page generation."""
-from prompt_eval.docs_generator import score_badge, render_version_page
+from prompt_eval.docs_generator import score_badge, render_version_page, _render_criteria_breakdown
 
 
 def test_score_badge_green_for_high_scores():
@@ -46,3 +46,42 @@ def test_render_version_page_includes_prompt_and_table():
     assert "You are an assistant." in md
     assert "#c8e6c9" in md  # green badge for 8
     assert "#ffcdd2" in md  # red badge for 4
+
+
+def test_render_criteria_breakdown_formats_pass_fail():
+    html = _render_criteria_breakdown({"C1": "PASS", "C2": "FAIL"})
+    assert "C1: PASS" in html
+    assert "C2: FAIL" in html
+
+
+def test_render_criteria_breakdown_empty_returns_empty():
+    assert _render_criteria_breakdown({}) == ""
+
+
+def test_render_version_page_shows_criteria_breakdown():
+    results = [
+        {
+            "test_case": {"scenario": "S1"},
+            "output": "out",
+            "score": 8,
+            "reasoning": "good",
+            "criteria_breakdown": {"Accuracy": "PASS", "Clarity": "PARTIAL"},
+        }
+    ]
+    md = render_version_page(version_label="v1", prompt_text="p", results=results)
+    assert "Criteria" in md
+    assert "Accuracy: PASS" in md
+    assert "Clarity: PARTIAL" in md
+
+
+def test_render_version_page_no_criteria_column_without_breakdown():
+    results = [
+        {
+            "test_case": {"scenario": "S1"},
+            "output": "out",
+            "score": 7,
+            "reasoning": "ok",
+        }
+    ]
+    md = render_version_page(version_label="v1", prompt_text="p", results=results)
+    assert "| Criteria |" not in md
