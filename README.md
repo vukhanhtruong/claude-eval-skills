@@ -42,7 +42,10 @@ rm -rf ~/.claude/plugins/cache/vukhanhtruong-claude-eval-skill
 ## Usage
 
 ```bash
-# Start a new evaluation run
+# Start with a task description (auto-generates prompt name)
+/prompt-eval:prompt_eval summarize tech articles from hackernews
+
+# Or specify a prompt name explicitly
 /prompt-eval:prompt_eval --prompt summarizer
 
 # List all prompts you've evaluated
@@ -54,6 +57,8 @@ rm -rf ~/.claude/plugins/cache/vukhanhtruong-claude-eval-skill
 # Resume an existing run (add new version)
 /prompt-eval:prompt_eval --prompt summarizer --resume run_001
 ```
+
+The skill auto-generates a prompt name from your description (e.g., `summarize_tech_hackernews`) and checks for similar existing prompts before creating a new one.
 
 The skill guides you through:
 1. **Guided prompt building** — coaching grounded in Anthropic best practices
