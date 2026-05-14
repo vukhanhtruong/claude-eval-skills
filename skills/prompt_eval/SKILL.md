@@ -448,7 +448,13 @@ uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval save-scores \
   --json '[{subagent_0_result}, {subagent_1_result}, ...]'
 ```
 
-The CLI validates scores and calculates summary statistics (average_score, pass_rate).
+The CLI validates scores and calculates summary statistics (average_score, pass_rate). It also regenerates the docs site and (re)starts `mkdocs serve` in the background, printing a line like:
+
+```
+mkdocs serve at http://127.0.0.1:8000  (log: .../mkdocs.log)
+```
+
+**Surface that URL to the user** in your next reply, e.g. "Docs updated at http://127.0.0.1:8000 — open it in a browser to browse results as we iterate." This is how the user knows the live site is ready; don't leave it buried in CLI output.
 
 ---
 
