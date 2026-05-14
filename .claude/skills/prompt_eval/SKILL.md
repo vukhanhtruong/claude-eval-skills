@@ -333,53 +333,138 @@ Save the chosen prompt to `prompt_eval_runs/prompts/{prompt}/runs/run_NNN/v1/pro
 
 ## Step 2 — Generate dataset
 
-Run:
-```bash
-uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval generate \
-  --prompt {prompt} \
-  --task "{task_description}" \
-  --inputs '{inputs_spec_json}' \
-  --num-cases {cases} \
-  --model {model} \
-  --run-id run_NNN
+Generate {cases} diverse test cases for this task. For each case, create:
+
+1. **scenario**: Brief description of what’s being tested (1 sentence)
+2. **prompt_inputs**: Concrete values matching the input spec from Phase B
+3. **solution_criteria**: 2-4 specific, measurable criteria for judging the output
+
+Think through scenarios that test different aspects:
+- Happy path (typical use case)
+- Edge cases (empty input, very long input, special characters)
+- Boundary conditions (limits, constraints)
+
+Output as a JSON array. Example:
+```json
+[
+  {
+    "scenario": "Standard product description",
+    "prompt_inputs": {"product": "Wireless headphones", "audience": "tech enthusiasts"},
+    "solution_criteria": [
+      "Mentions at least 2 key features",
+      "Under 100 words",
+      "Includes a call to action"
+    ]
+  },
+  {
+    "scenario": "Minimal input edge case",
+    "prompt_inputs": {"product": "X", "audience": "general"},
+    "solution_criteria": [
+      "Handles short product name gracefully",
+      "Still produces coherent output",
+      "Under 100 words"
+    ]
+  }
+]
 ```
 
-Read `prompt_eval_runs/prompts/{prompt}/runs/run_NNN/dataset.json`. Show the user a brief summary of each generated test case (scenario + key inputs).
+After generating, save via CLI:
+```bash
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval save-dataset \
+  --prompt {prompt} \
+  --run-id {run_id} \
+  --json '{generated_json}'
+```
+
+Read `prompt_eval_runs/prompts/{prompt}/runs/{run_id}/dataset.json` and show the user a summary of each test case.
 
 ---
 
 ## Step 3 — Run + grade
 
-**Before the FIRST evaluate of this session:** check whether all three of `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` are set in the environment. If they are, ask the user once:
+### 3a. Execute prompts
 
-> "Langfuse credentials detected. Push results to Langfuse for this run? [Y/n]"
+For each test case in `dataset.json`:
 
-If the user answers yes, add `--push-to-langfuse` to every `evaluate` invocation in this session. If no, omit the flag. Do not ask again unless the user explicitly changes their mind. If credentials are not all set, never ask — just proceed without the flag.
+1. Read the prompt template from `v{n}/prompt.txt`
+2. Render: replace `{variable}` placeholders with values from `prompt_inputs`
+3. Execute the rendered prompt (respond as the prompt instructs)
+4. If tools are enabled and you need external data, generate a realistic mock response
+5. Collect the output
 
-Run:
+After executing all cases, save outputs:
 ```bash
-uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval evaluate \
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval save-output \
   --prompt {prompt} \
+  --run-id {run_id} \
   --version v{n} \
-  --model {model} \
-  --judge-model {judge_model} \
-  --run-id run_NNN \
-  [--tools web_fetch,web_search] \
-  [--tool-schema path/to/custom.json] \
-  [--max-tool-turns N] \
-  [--push-to-langfuse]
+  --json '[{"case_index": 0, "output": "...", "tool_calls": []}, ...]'
 ```
 
-Include `--tools` and/or `--tool-schema` only if configured in Phase H. When tools are enabled:
-- Claude can call them during evaluation
-- `ToolMocker` generates realistic mock responses using Haiku (works for ANY tool, builtin or custom)
-- Mocks are cached in `mocks.json` for reproducibility across versions
+### 3b. Grade outputs (parallel subagents)
 
-Stream output. When complete, the script auto-regenerates the docs site and starts `mkdocs serve` if it's not already running. The first invocation per project also bootstraps `prompt_eval_runs/docs-site/` from the bundled template.
+Spawn one grading subagent per test case. Send ALL Agent calls in a single message for parallel execution.
 
-If the output mentions `⚠ Langfuse flush failed`, run the suggested `prompt-eval push ...` command to retry. If the user said "no" earlier and changes their mind later, the same `prompt-eval push` command works retroactively.
+For each test case, the subagent prompt includes:
+- The test case (scenario, prompt_inputs, solution_criteria)
+- The output to evaluate
+- The GEval methodology (below)
+- Expected JSON output format
 
-(uvx builds the package from the skill dir on first run and caches it; subsequent invocations reuse the cached env.)
+**Subagent prompt template:**
+```
+You are a grading subagent. Evaluate this output using the GEval methodology.
+
+## Test Case
+Scenario: {scenario}
+Inputs: {prompt_inputs as JSON}
+
+## Solution Criteria
+{criteria as bullet list}
+
+## Output to Evaluate
+{output text}
+
+## GEval Methodology
+
+1. **List criteria**: Write out each criterion from solution_criteria.
+
+2. **Assess each criterion**:
+   For each criterion:
+   - Quote evidence from the output (or note absence)
+   - Assess: PASS (fully met) | PARTIAL (partially met) | FAIL (not met)
+   - Brief explanation (1 sentence)
+
+3. **Calculate score**:
+   - PASS = 1.0, PARTIAL = 0.5, FAIL = 0.0
+   - Average across criteria
+   - Scale to 1-10 (multiply by 10)
+   - Round to nearest integer
+
+4. **Write reasoning**: 2-3 sentences summarizing the assessment.
+
+## Output Format
+Return ONLY this JSON, no markdown fences:
+{"case_index": {i}, "scenario": "{scenario}", "score": 1-10, "reasoning": "...", "criteria_breakdown": {"Criterion 1": "PASS", "Criterion 2": "PARTIAL"}}
+```
+
+**Example spawning 3 subagents:**
+```
+Agent(description="Grade case 0", prompt="...case 0 context...")
+Agent(description="Grade case 1", prompt="...case 1 context...")
+Agent(description="Grade case 2", prompt="...case 2 context...")
+```
+
+Collect all subagent JSON results into an array, then save:
+```bash
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval save-scores \
+  --prompt {prompt} \
+  --run-id {run_id} \
+  --version v{n} \
+  --json '[{subagent_0_result}, {subagent_1_result}, ...]'
+```
+
+The CLI validates scores and calculates summary statistics (average_score, pass_rate).
 
 ---
 
@@ -387,34 +472,36 @@ If the output mentions `⚠ Langfuse flush failed`, run the suggested `prompt-ev
 
 Get the structured scoreboard:
 ```bash
-uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval show --prompt {prompt} --run-id run_NNN --version v{n} --json
+uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval show \
+  --prompt {prompt} \
+  --run-id {run_id} \
+  --version v{n} \
+  --json
 ```
 
-Parse the JSON output (it has `run_id`, `version`, `average_score`, `pass_rate`, and a `cases` list with `scenario`, `score`, `output_length`, `reasoning` per case). Render it back to the user as this Markdown table:
+Parse the JSON output. Render as this Markdown table:
 
-| Scenario | Score | Reasoning |
-|---|---|---|
+| Scenario | Score | Criteria | Reasoning |
+|----------|-------|----------|-----------|
+| {scenario} | {score}/10 | {breakdown summary} | {reasoning} |
 
-Print average and pass rate. Print the URL to the version page (e.g. `http://127.0.0.1:8000/prompts/{prompt}/runs/run_001/v1/`).
+Print average score and pass rate from the summary.
 
-**Baseline-coverage check (before failure analysis):** read `prompt_eval_runs/prompts/{prompt}/runs/run_NNN/v{n}/prompt.txt` and count `<example>` blocks. If zero, surface this as a recommendation alongside the #1 failure-pattern suggestion below:
+**Analyze failures (score < 7):**
 
-> "Anthropic recommends 1–3 worked examples for non-trivial outputs; this prompt has none. Drafting 2–3 examples often lifts quality 20–30% — want me to draft candidates?"
+For each low-scoring case, examine the `criteria_breakdown`:
+- Which criteria got FAIL or PARTIAL?
+- What pattern emerges?
 
-Do not block iteration. The user may still proceed with the failure-pattern remedy or accept this recommendation instead.
-
-Then analyze low-scoring cases (score < 7). For each, classify the failure pattern using this table:
+Use this table to suggest improvements:
 
 | Pattern | Remedy |
-|---|---|
-| Wrong/missing output format | Tighten output spec; add example demonstrating exact format |
-| Hallucinated values | Add "do not invent values; quote from input" rule + grounded example |
-| Tone/expertise mismatch | Add or sharpen role |
-| Ignored constraint | Move constraint into example with `<why_ideal>` annotation |
-| Vague output | Add context (the "why") to drive specificity |
-| Missed edge case | Add a few-shot example covering that case |
-
-Pick the most prevalent pattern and remedy as the **#1 suggestion** for Step 5.
+|---------|--------|
+| Output too long/short | Add explicit length constraint in prompt |
+| Missing required element | Add example showing the element |
+| Wrong format | Tighten output spec with exact format |
+| Tone mismatch | Add or refine role |
+| Hallucinated content | Add "quote from input only" rule |
 
 ---
 
