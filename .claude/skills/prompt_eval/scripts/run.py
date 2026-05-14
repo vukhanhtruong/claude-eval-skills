@@ -690,6 +690,15 @@ def _do_save_dataset(prompt_name: str, run_id: str, json_data: str) -> None:
     print(f"Saved dataset to {path}")
 
 
+def _do_save_scores(prompt_name: str, run_id: str, version: str, json_data: str) -> None:
+    """Validate, aggregate, and save scores.json."""
+    scores = json.loads(json_data)
+    root = _resolve_artifact_root()
+    path = root / "prompts" / prompt_name / "runs" / run_id / version / "scores.json"
+    ResultsHelper.save(scores, version, path)
+    print(f"Saved scores to {path}")
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="prompt-eval")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -747,6 +756,12 @@ def _build_parser() -> argparse.ArgumentParser:
     save_output_parser.add_argument("--run-id", required=True)
     save_output_parser.add_argument("--version", required=True)
     save_output_parser.add_argument("--json", required=True, dest="json_data")
+
+    save_scores_parser = sub.add_parser("save-scores", help="Save scores.json")
+    save_scores_parser.add_argument("--prompt", required=True)
+    save_scores_parser.add_argument("--run-id", required=True)
+    save_scores_parser.add_argument("--version", required=True)
+    save_scores_parser.add_argument("--json", required=True, dest="json_data")
 
     return p
 
@@ -820,6 +835,9 @@ def main(argv: list | None = None) -> int:
         return 0
     if args.cmd == "save-output":
         _do_save_output(args.prompt, args.run_id, args.version, args.json_data)
+        return 0
+    if args.cmd == "save-scores":
+        _do_save_scores(args.prompt, args.run_id, args.version, args.json_data)
         return 0
     return 1
 
