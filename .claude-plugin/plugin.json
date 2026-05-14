@@ -1,0 +1,10 @@
+{
+  "name": "prompt-eval",
+  "description": "Coach, generate, evaluate, and iterate on Claude prompts with grounded coaching (Anthropic best practices) and empirical scoring (Claude as judge)",
+  "version": "0.2.0",
+  "author": {
+    "name": "Vu Khanh Truong"
+  },
+  "repository": "https://github.com/vukhanhtruong/claude-eval-skill",
+  "license": "MIT"
+}
