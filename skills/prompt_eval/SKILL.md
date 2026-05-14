@@ -135,17 +135,12 @@ Analyze the task description for signals that Claude needs external data:
 - **Dynamic queries:** database lookups, user accounts, inventory, bookings
 - **Domain-specific data:** flights, hotels, products, listings, market data
 
-**IF any signal matches → assume tools are needed. Show brief status and proceed.**
+**IF any signal matches → silently set `tools_needed = true` and stash the inferred tool name(s) for Phase H. Do NOT surface this to the user.** Mock-tool plumbing is an evaluation-harness implementation detail; the user is building a portable prompt that will be pasted into whichever LLM/tool they choose, and that target tool will route its own tool use based on whatever tools it has available. The skill mocks tools only to verify the prompt works during evaluation.
 
-> "Detected tool need: `{inferred_tool_name}` ({brief justification}).
-> Mocks will be generated during evaluation."
+Proceed immediately to Phase B (Inputs).
 
-Set `tools_needed = true` and carry the assumed tool config to Phase H. Proceed immediately to Phase B (Inputs).
-
-**Override:** User can interrupt with "change tool to X" or "remove tools" at any point.
-
-**Examples of tasks needing tools — assumption made by skill, not user:**
-| Task description | Skill assumes tool | Skill auto-generates |
+**Internal inference table (for the skill's own reasoning — never shown to user):**
+| Task description | Inferred tool | Mock generates |
 |---|---|---|
 | "Summarize AI news from Hackernoon" | `web_fetch` (builtin) | URL → article content |
 | "Get stock analysis for AAPL" | `get_stock_data` (custom) | Ticker → price/PE/volume |
@@ -154,13 +149,9 @@ Set `tools_needed = true` and carry the assumed tool config to Phase H. Proceed 
 | "Latest crypto prices for BTC, ETH" | `get_crypto_price` (custom) | Symbol → USD price |
 | "Summarize this article: [text]" | NO tools (content inline) | — |
 
-**The skill does the work, not the user:** detects need → assumes tool → drafts schema → mocks data. User only confirms or overrides.
-
-Optional follow-up: "Why does Claude need to do this? (Adding context helps Claude generalize.)"
-
 ### Phase B: Inputs (conditional)
 
-**If `tools_needed = true` (from Phase A tool detection), skip to "No user inputs needed" below — the tools will fetch the data.**
+**If `tools_needed = true` (from Phase A tool detection), skip to "No user inputs needed" below — the prompt will operate on data fetched at runtime by the target tool.**
 
 **Analyze task for data source pattern:**
 
@@ -171,7 +162,7 @@ Optional follow-up: "Why does Claude need to do this? (Adding context helps Clau
 | Ambiguous | Ask once | Neither pattern clear |
 
 **If no inputs needed (tool-fetched task):**
-> "No user inputs needed — the AI will fetch data via tools.
+> "No user inputs needed — the prompt operates on real-time data fetched at runtime.
 > (Say 'add input' if you want to include any)"
 
 Proceed immediately to Phase C.
@@ -260,7 +251,7 @@ If yes:
 
 ### Phase H: Tool setup (only if `tools_needed = true` from Phase A)
 
-If Phase A flagged `tools_needed = true`, set up the tool config silently. **Do the work, log what you did, proceed without confirmation.**
+If Phase A flagged `tools_needed = true`, set up the tool config silently. **Do the work, do not show progress, do not log paths to the user, proceed without confirmation.** The user shouldn't know Phase H ran — mock-tool plumbing is an internal eval-harness concern, not part of the user-facing flow.
 
 **Step 1: Classify the assumed tool**
 
@@ -289,10 +280,7 @@ Schema format (Anthropic tool spec):
 }
 ```
 
-Infer parameters from the task: "stock analysis" → `ticker` param; "weather" → `location`; "flight search" → `origin`, `destination`, `date`. Use the Write tool to create the file.
-
-Log the schema creation (no confirmation):
-> "Created tool schema: `prompt_eval_runs/prompts/{prompt}/tools/{tool_name}.json`"
+Infer parameters from the task: "stock analysis" → `ticker` param; "weather" → `location`; "flight search" → `origin`, `destination`, `date`. Use the Write tool to create the file. Do not log the path to the user.
 
 Proceed immediately to Step 3.
 
@@ -301,8 +289,6 @@ Proceed immediately to Step 3.
 - Builtin tool: add `--tools {name}` to all subsequent commands
 - Custom tool: add `--tool-schema {path}` to all subsequent commands
 - Both flags can be combined
-
-**Override:** User can say "edit tool schema" to open the file for manual editing.
 
 **Example end-to-end for "Get stock analysis for AAPL":**
 
@@ -337,18 +323,18 @@ uvx ... prompt-eval evaluate \
 
 ### Final assembly
 
-**If tools are configured, include a tools summary section:**
+**Keep the prompt portable — tool-agnostic.**
 
-```
----
-**Tools enabled:** {tool_name} ({builtin or custom})
-**Mock strategy:** Haiku generates realistic responses per test case
----
-```
+The prompt.txt the user will copy elsewhere must describe *what input arrives* and *what output should result*. Do not bake specific tool names or procedural tool-call steps into the prompt body. Modern LLMs auto-route tool use based on whichever tools they have available at inference time; your job is to specify the task, not script the implementation.
 
-Show this summary above the assembled prompt as a pre-header to the user; do not include it in `prompt.txt`.
+| | Example |
+|---|---|
+| ✅ Good | "You are given a portrait image and asked to recommend 3 hairstyles suited to the subject's face shape. Produce ..." |
+| ❌ Bad  | "1. Call `web_fetch` on `{portrait_url}` to retrieve the portrait. 2. If the fetch fails ..." |
 
-Show the assembled prompt. Annotate which Anthropic principle each section serves. Ask:
+The tool schema (used only during evaluation) lives separately under `tools/{tool_name}.json`. It tells the eval harness what mocks to generate — it is not the user's concern and never appears in `prompt.txt`.
+
+Show the assembled prompt to the user. Annotate which Anthropic principle each section serves. Ask:
 
 > "Use as-is, edit inline, paste your own, or restart wizard?"
 
