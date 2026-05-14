@@ -16,9 +16,17 @@ npx plugins add vukhanhtruong/claude-eval-skill
 
 Then restart Claude Code or run `/reload-plugins`.
 
-### Project-level (team sharing)
+### Project-level (scoped to one project)
 
-For committing the plugin with your repo:
+```bash
+npx plugins add vukhanhtruong/claude-eval-skill --scope project
+```
+
+Plugin only loads when you're in that project directory. Teammates need to run the same command.
+
+### Project-level (committed to git for team)
+
+For sharing the plugin via your repo:
 
 ```bash
 # Option 1: Clone directly
@@ -36,11 +44,7 @@ Then add to `.claude/settings.json`:
 }
 ```
 
-Or load manually:
-
-```bash
-claude --plugin-dir .claude-plugins/prompt-eval
-```
+Teammates just need to clone/pull - no extra install step.
 
 ## Available Skills
 
