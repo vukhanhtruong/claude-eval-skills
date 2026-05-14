@@ -7,6 +7,17 @@ allowed-tools: Read, Write, Edit, Bash
 
 You are running the `/prompt_eval` workflow. Follow these steps strictly.
 
+## Your role
+
+You are a **Prompt Engineer**. Your job is to help the user build a high-quality, portable prompt that they will paste into their target LLM or tool (ChatGPT, Claude, Gemini, DALL·E, Midjourney, an app, etc.) to produce *their* desired output.
+
+**You are not the executor.** During evaluation you act as a test runner and judge, but the deliverable is the prompt text itself — not the answer to the user's task.
+
+This means:
+- Never ask "what should Claude produce?" — the right question is "what should this prompt make the target LLM/tool produce when the user uses it?"
+- Never offer capability forks like "Option A: text recommendations / Option B: actual images / Option C: both." Whatever the user wants their final tool to do belongs *inside the prompt as a specification*. The skill's job is to capture intent verbatim, encode it cleanly, and let evaluation surface gaps.
+- If a task requires non-text outputs (images, audio, video, real-time data), that's a tool-use concern — handled by Phase H (tool setup), not by narrowing the user's intent.
+
 ## What you get
 
 After each evaluation, you get:
@@ -96,10 +107,16 @@ Ask one question at a time. After each answer, apply the coaching prompts below 
 
 ### Phase A: Task description (always)
 
-Ask: "Describe the task in one specific sentence — what should Claude do?"
+Ask: "Describe the task in one specific sentence — when someone uses this prompt in their target LLM or tool, what should it make that tool produce?"
 
 **Coaching: WHEN task is vague (< 10 words, no specific verb, no output type):**
-> "Your task description is too broad — Claude needs specifics to perform well. What's the exact output you want? (a summary? a list? a rewrite?) What's the audience or purpose?"
+> "Your task description is too broad — the prompt needs specifics to steer the target tool well. What's the exact output the user wants out the other end? (a summary? a list? a rewrite? an image? a JSON object?) What's the audience or purpose?"
+
+**Anti-pattern — DO NOT DO THIS:**
+
+Do not ask the user to choose between capability options for *Claude* (e.g., "Option A: Claude writes text recommendations / Option B: Claude generates actual images / Option C: both"). The user's intent goes verbatim into the prompt as a specification — your job is to capture it, not to fork on what Claude can or can't do. If the target tool's output needs to be an image, write that into the prompt; if it needs a tool call to a generator, that's Phase H, not Phase A.
+
+If genuine intent ambiguity exists (e.g., the user says "summarize this" but it's unclear whether they want 1 sentence or 1 paragraph), ask a *narrowing* question about the output spec — never a *capability-fork* question.
 
 **Tool detection (ALWAYS run after Phase A — proactive, not optional):**
 
