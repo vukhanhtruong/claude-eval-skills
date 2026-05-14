@@ -11,7 +11,7 @@ import sys
 import time
 from pathlib import Path
 
-from prompt_eval.docs_generator import regenerate_for_run
+from prompt_eval.docs_generator import _load_version_results, regenerate_for_run
 from prompt_eval.data_helpers import DatasetHelper, OutputHelper, ResultsHelper
 
 
@@ -277,13 +277,15 @@ def list_prompts(prompts_dir: Path) -> None:
 def _do_show(out_dir: Path, version: str, json_output: bool = False) -> None:
     """Print a scoreboard for one (run, version). With --json, emit structured
     JSON for programmatic consumption (Claude can parse it without re-reading
-    output.json itself)."""
-    output_file = out_dir / version / "output.json"
-    if not output_file.exists():
+    the underlying files itself)."""
+    version_dir = out_dir / version
+    output_file = version_dir / "output.json"
+    scores_file = version_dir / "scores.json"
+    if not output_file.exists() and not scores_file.exists():
         print(f"No results at {output_file}", file=sys.stderr)
         sys.exit(1)
 
-    results = json.loads(output_file.read_text())
+    results = _load_version_results(version_dir)
     cases = []
     for r in results:
         sc = r["test_case"].get("scenario", "")
@@ -291,7 +293,7 @@ def _do_show(out_dir: Path, version: str, json_output: bool = False) -> None:
         cases.append({
             "scenario": scenario,
             "score": r["score"],
-            "output_length": len(r["output"]),
+            "output_length": len(r.get("output", "")),
             "reasoning": r["reasoning"],
         })
 
@@ -340,13 +342,45 @@ def _do_save_dataset(prompt_name: str, run_id: str, json_data: str) -> None:
     print(f"Saved dataset to {path}")
 
 
+def _update_metadata(run_dir: Path, version: str, run_id: str) -> None:
+    """Ensure metadata.json exists in run_dir and the version is registered."""
+    meta_path = run_dir / "metadata.json"
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text())
+    else:
+        meta = {"run_id": run_id, "versions": []}
+    versions = meta.setdefault("versions", [])
+    if version not in versions:
+        versions.append(version)
+    meta_path.write_text(json.dumps(meta, indent=2))
+
+
+def _refresh_docs(prompt_name: str, run_id: str) -> None:
+    """Bootstrap docs-site, regenerate this run's pages, restart mkdocs."""
+    root = _resolve_artifact_root()
+    run_dir = root / "prompts" / prompt_name / "runs" / run_id
+    docs_site = root / "docs-site"
+    _bootstrap_docs_site(docs_site)
+    regenerate_for_run(
+        run_dir=run_dir,
+        docs_root=docs_site / "docs",
+        mkdocs_yml=docs_site / "mkdocs.yml",
+        prompt_name=prompt_name,
+    )
+    restart_mkdocs(docs_site)
+
+
 def _do_save_scores(prompt_name: str, run_id: str, version: str, json_data: str) -> None:
-    """Validate, aggregate, and save scores.json."""
+    """Validate scores, save scores.json, update metadata, regenerate docs,
+    restart the mkdocs server."""
     scores = json.loads(json_data)
     root = _resolve_artifact_root()
-    path = root / "prompts" / prompt_name / "runs" / run_id / version / "scores.json"
+    run_dir = root / "prompts" / prompt_name / "runs" / run_id
+    path = run_dir / version / "scores.json"
     ResultsHelper.save(scores, version, path)
     print(f"Saved scores to {path}")
+    _update_metadata(run_dir, version, run_id)
+    _refresh_docs(prompt_name, run_id)
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -86,3 +86,36 @@ def test_show_errors_clearly_when_output_file_missing(tmp_path):
         _do_show(out_dir, "v1", json_output=False)
 
     assert exc.value.code == 1
+
+
+def test_show_merges_separate_scores_and_output_files(tmp_path, capsys):
+    """Current CLI flow writes outputs and scores to separate files
+    (output.json + scores.json), not merged combined records. Show must
+    join them by case_index — not crash with KeyError on r['test_case']."""
+    out_dir = tmp_path / "prompts" / "summarizer" / "runs" / "run_001"
+    (out_dir / "v1").mkdir(parents=True)
+    (out_dir / "v1" / "output.json").write_text(json.dumps([
+        {"case_index": 0, "output": "Summary text...", "tool_calls": []},
+    ]))
+    (out_dir / "v1" / "scores.json").write_text(json.dumps({
+        "version": "v1",
+        "cases": [{
+            "case_index": 0,
+            "scenario": "Vegan endurance runner",
+            "score": 8,
+            "reasoning": "Covers caloric total and excludes animal products.",
+            "criteria_breakdown": {"C1": "PASS"},
+        }],
+        "summary": {"average_score": 8.0, "pass_rate": 1.0, "total_cases": 1},
+    }))
+
+    _do_show(out_dir, "v1", json_output=True)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["run_id"] == "run_001"
+    assert payload["version"] == "v1"
+    assert payload["average_score"] == 8.0
+    assert payload["pass_rate"] == 100.0
+    assert payload["cases"][0]["scenario"] == "Vegan endurance runner"
+    assert payload["cases"][0]["score"] == 8
+    assert payload["cases"][0]["reasoning"].startswith("Covers caloric")
