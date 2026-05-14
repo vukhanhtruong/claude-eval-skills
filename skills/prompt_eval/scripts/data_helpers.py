@@ -114,3 +114,40 @@ class OutputHelper:
             raise ValueError(f"Invalid outputs: {errors}")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(outputs, indent=2))
+
+
+class MetadataHelper:
+    """Read and write run-level metadata.json: model config, version list,
+    cross-validation linkage."""
+
+    @staticmethod
+    def read(run_dir: Path) -> dict:
+        meta_path = run_dir / "metadata.json"
+        if not meta_path.exists():
+            return {}
+        return json.loads(meta_path.read_text())
+
+    @staticmethod
+    def write(run_dir: Path, meta: dict) -> None:
+        meta_path = run_dir / "metadata.json"
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(json.dumps(meta, indent=2))
+
+    @staticmethod
+    def set_models(run_dir: Path, test_model: str, judge_model: str) -> None:
+        meta = MetadataHelper.read(run_dir)
+        meta["test_model"] = test_model
+        meta["judge_model"] = judge_model
+        meta["models_locked"] = True
+        MetadataHelper.write(run_dir, meta)
+
+    @staticmethod
+    def set_cross_validation_link(
+        run_dir: Path, source_run_id: str, source_version: str
+    ) -> None:
+        meta = MetadataHelper.read(run_dir)
+        meta["cross_validation_of"] = {
+            "run_id": source_run_id,
+            "version": source_version,
+        }
+        MetadataHelper.write(run_dir, meta)

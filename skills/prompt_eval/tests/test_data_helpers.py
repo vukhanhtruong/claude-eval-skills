@@ -1,6 +1,7 @@
 import json
 import pytest
 from prompt_eval.data_helpers import DatasetHelper, OutputHelper, ResultsHelper
+from prompt_eval.data_helpers import MetadataHelper
 
 
 class TestDatasetHelperValidate:
@@ -238,3 +239,51 @@ class TestOutputHelper:
         path = tmp_path / "v1" / "output.json"
         with pytest.raises(ValueError, match="missing required keys"):
             OutputHelper.save([{"case_index": 0}], path)
+
+
+class TestMetadataHelper:
+    def test_read_returns_empty_dict_when_missing(self, tmp_path):
+        run_dir = tmp_path / "run_001"
+        run_dir.mkdir()
+        assert MetadataHelper.read(run_dir) == {}
+
+    def test_read_returns_parsed_metadata(self, tmp_path):
+        run_dir = tmp_path / "run_001"
+        run_dir.mkdir()
+        (run_dir / "metadata.json").write_text('{"run_id": "run_001", "versions": ["v1"]}')
+        meta = MetadataHelper.read(run_dir)
+        assert meta == {"run_id": "run_001", "versions": ["v1"]}
+
+    def test_write_creates_parent_and_writes_json(self, tmp_path):
+        run_dir = tmp_path / "nested" / "run_001"
+        MetadataHelper.write(run_dir, {"run_id": "run_001"})
+        assert (run_dir / "metadata.json").exists()
+        assert json.loads((run_dir / "metadata.json").read_text()) == {"run_id": "run_001"}
+
+    def test_set_models_writes_and_locks(self, tmp_path):
+        run_dir = tmp_path / "run_001"
+        run_dir.mkdir()
+        (run_dir / "metadata.json").write_text('{"run_id": "run_001"}')
+        MetadataHelper.set_models(run_dir, "haiku", "sonnet")
+        meta = MetadataHelper.read(run_dir)
+        assert meta["test_model"] == "haiku"
+        assert meta["judge_model"] == "sonnet"
+        assert meta["models_locked"] is True
+        assert meta["run_id"] == "run_001"  # preserved
+
+    def test_set_models_overwrites_existing_values(self, tmp_path):
+        run_dir = tmp_path / "run_001"
+        run_dir.mkdir()
+        MetadataHelper.write(run_dir, {"test_model": "old", "judge_model": "old"})
+        MetadataHelper.set_models(run_dir, "haiku", "sonnet")
+        meta = MetadataHelper.read(run_dir)
+        assert meta["test_model"] == "haiku"
+        assert meta["judge_model"] == "sonnet"
+
+    def test_set_cross_validation_link_writes_linkage(self, tmp_path):
+        run_dir = tmp_path / "run_002"
+        run_dir.mkdir()
+        (run_dir / "metadata.json").write_text('{"run_id": "run_002"}')
+        MetadataHelper.set_cross_validation_link(run_dir, "run_001", "v3")
+        meta = MetadataHelper.read(run_dir)
+        assert meta["cross_validation_of"] == {"run_id": "run_001", "version": "v3"}
