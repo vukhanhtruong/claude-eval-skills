@@ -403,56 +403,29 @@ uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval save-output \
 
 ### 3b. Grade outputs (parallel subagents)
 
-Spawn one grading subagent per test case. Send ALL Agent calls in a single message for parallel execution.
+Spawn one `llm-judge` subagent per test case. Send ALL Agent calls in a single message for parallel execution.
 
-For each test case, the subagent prompt includes:
-- The test case (scenario, prompt_inputs, solution_criteria)
-- The output to evaluate
-- The GEval methodology (below)
-- Expected JSON output format
+The `llm-judge` agent (defined in `.claude/agents/llm-judge.md`) implements the GEval methodology. Each subagent prompt provides the test case data:
 
 **Subagent prompt template:**
 ```
-You are a grading subagent. Evaluate this output using the GEval methodology.
-
 ## Test Case
-Scenario: {scenario}
-Inputs: {prompt_inputs as JSON}
+case_index: {i}
+scenario: {scenario}
+prompt_inputs: {prompt_inputs as JSON}
 
 ## Solution Criteria
 {criteria as bullet list}
 
 ## Output to Evaluate
 {output text}
-
-## GEval Methodology
-
-1. **List criteria**: Write out each criterion from solution_criteria.
-
-2. **Assess each criterion**:
-   For each criterion:
-   - Quote evidence from the output (or note absence)
-   - Assess: PASS (fully met) | PARTIAL (partially met) | FAIL (not met)
-   - Brief explanation (1 sentence)
-
-3. **Calculate score**:
-   - PASS = 1.0, PARTIAL = 0.5, FAIL = 0.0
-   - Average across criteria
-   - Scale to 1-10 (multiply by 10)
-   - Round to nearest integer
-
-4. **Write reasoning**: 2-3 sentences summarizing the assessment.
-
-## Output Format
-Return ONLY this JSON, no markdown fences:
-{"case_index": {i}, "scenario": "{scenario}", "score": 1-10, "reasoning": "...", "criteria_breakdown": {"Criterion 1": "PASS", "Criterion 2": "PARTIAL"}}
 ```
 
 **Example spawning 3 subagents:**
 ```
-Agent(description="Grade case 0", prompt="...case 0 context...")
-Agent(description="Grade case 1", prompt="...case 1 context...")
-Agent(description="Grade case 2", prompt="...case 2 context...")
+Agent(description="Grade case 0", subagent_type="llm-judge", prompt="## Test Case\ncase_index: 0\n...")
+Agent(description="Grade case 1", subagent_type="llm-judge", prompt="## Test Case\ncase_index: 1\n...")
+Agent(description="Grade case 2", subagent_type="llm-judge", prompt="## Test Case\ncase_index: 2\n...")
 ```
 
 Collect all subagent JSON results into an array, then save:
