@@ -105,15 +105,29 @@ class OutputHelper:
         return errors
 
     @staticmethod
-    def save(outputs: list[dict], path: Path) -> None:
-        """Validate schema, then write output.json. Rejects payloads carrying
-        scoring fields (score / reasoning / criteria_breakdown / test_case /
-        scenario) — those belong in save-scores."""
+    def save(outputs: list[dict], path: Path, model: str | None = None) -> None:
+        """Validate schema and model lock, then write output.json. Rejects payloads
+        carrying scoring fields. Rejects model mismatches when the run's models
+        are locked via MetadataHelper.set_models."""
         errors = OutputHelper.validate(outputs)
         if errors:
             raise ValueError(f"Invalid outputs: {errors}")
+        OutputHelper._check_model_lock(path.parent.parent, model)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(outputs, indent=2))
+
+    @staticmethod
+    def _check_model_lock(run_dir: Path, model: str | None) -> None:
+        meta = MetadataHelper.read(run_dir)
+        if not meta.get("models_locked"):
+            return
+        locked = meta.get("test_model")
+        if model is None:
+            raise ValueError(f"Run has locked test_model={locked!r}; pass --model")
+        if model != locked:
+            raise ValueError(
+                f"--model {model!r} disagrees with locked test_model={locked!r}"
+            )
 
 
 class MetadataHelper:

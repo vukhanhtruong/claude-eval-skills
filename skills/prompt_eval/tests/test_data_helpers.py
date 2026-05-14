@@ -240,6 +240,37 @@ class TestOutputHelper:
         with pytest.raises(ValueError, match="missing required keys"):
             OutputHelper.save([{"case_index": 0}], path)
 
+    def test_save_passes_when_models_not_locked(self, tmp_path):
+        run_dir = tmp_path / "run_001"
+        version_dir = run_dir / "v1"
+        outputs = [{"case_index": 0, "output": "hi"}]
+        OutputHelper.save(outputs, version_dir / "output.json", model="haiku")
+        assert (version_dir / "output.json").exists()
+
+    def test_save_raises_when_locked_and_no_model_passed(self, tmp_path):
+        run_dir = tmp_path / "run_001"
+        run_dir.mkdir()
+        MetadataHelper.set_models(run_dir, "haiku", "sonnet")
+        outputs = [{"case_index": 0, "output": "hi"}]
+        with pytest.raises(ValueError, match="locked test_model"):
+            OutputHelper.save(outputs, run_dir / "v1" / "output.json", model=None)
+
+    def test_save_raises_when_model_disagrees_with_lock(self, tmp_path):
+        run_dir = tmp_path / "run_001"
+        run_dir.mkdir()
+        MetadataHelper.set_models(run_dir, "haiku", "sonnet")
+        outputs = [{"case_index": 0, "output": "hi"}]
+        with pytest.raises(ValueError, match="disagrees with locked test_model"):
+            OutputHelper.save(outputs, run_dir / "v1" / "output.json", model="opus")
+
+    def test_save_passes_when_model_matches_lock(self, tmp_path):
+        run_dir = tmp_path / "run_001"
+        run_dir.mkdir()
+        MetadataHelper.set_models(run_dir, "haiku", "sonnet")
+        outputs = [{"case_index": 0, "output": "hi"}]
+        OutputHelper.save(outputs, run_dir / "v1" / "output.json", model="haiku")
+        assert (run_dir / "v1" / "output.json").exists()
+
 
 class TestMetadataHelper:
     def test_read_returns_empty_dict_when_missing(self, tmp_path):
