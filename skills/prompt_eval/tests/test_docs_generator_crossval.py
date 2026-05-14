@@ -40,7 +40,9 @@ class TestCrossValFooter:
         assert "Cross-validations:" in page
         assert "run_002" in page
         assert "run_003" in page
-        assert "sonnet" in page  # model labels visible in footer
+        # "test=opus" only appears in the footer (the header uses test=haiku),
+        # so this anchors the assertion to the footer rather than matching by accident.
+        assert "test=opus" in page
 
     def test_regenerate_for_run_passes_siblings_when_source_has_them(self, tmp_path):
         runs_dir = tmp_path / "prompts" / "demo" / "runs"
