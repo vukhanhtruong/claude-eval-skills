@@ -61,11 +61,13 @@ class ResultsHelper:
         }
 
     @staticmethod
-    def save(scores: list[dict], version: str, path: Path) -> None:
-        """Validate, aggregate, and write scores.json."""
+    def save(scores: list[dict], version: str, path: Path, model: str | None = None) -> None:
+        """Validate schema and model lock, then write scores.json with aggregate
+        summary. Rejects model mismatches when the run's models are locked."""
         errors = ResultsHelper.validate_scores(scores)
         if errors:
             raise ValueError(f"Invalid scores: {errors}")
+        ResultsHelper._check_model_lock(path.parent.parent, model)
         result = {
             "version": version,
             "cases": scores,
@@ -73,6 +75,19 @@ class ResultsHelper:
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(result, indent=2))
+
+    @staticmethod
+    def _check_model_lock(run_dir: Path, model: str | None) -> None:
+        meta = MetadataHelper.read(run_dir)
+        if not meta.get("models_locked"):
+            return
+        locked = meta.get("judge_model")
+        if model is None:
+            raise ValueError(f"Run has locked judge_model={locked!r}; pass --model")
+        if model != locked:
+            raise ValueError(
+                f"--model {model!r} disagrees with locked judge_model={locked!r}"
+            )
 
 
 class OutputHelper:

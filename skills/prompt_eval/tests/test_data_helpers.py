@@ -160,6 +160,36 @@ class TestResultsHelperSave:
         with pytest.raises(ValueError, match="Invalid scores"):
             ResultsHelper.save(scores, "v1", path)
 
+    def test_save_passes_when_models_not_locked(self, tmp_path):
+        scores = [{"scenario": "s", "score": 9, "reasoning": "ok", "criteria_breakdown": {}}]
+        path = tmp_path / "run_001" / "v1" / "scores.json"
+        ResultsHelper.save(scores, "v1", path, model="sonnet")
+        assert path.exists()
+
+    def test_save_raises_when_locked_and_no_model_passed(self, tmp_path):
+        run_dir = tmp_path / "run_001"
+        run_dir.mkdir()
+        MetadataHelper.set_models(run_dir, "haiku", "sonnet")
+        scores = [{"scenario": "s", "score": 9, "reasoning": "ok", "criteria_breakdown": {}}]
+        with pytest.raises(ValueError, match="locked judge_model"):
+            ResultsHelper.save(scores, "v1", run_dir / "v1" / "scores.json", model=None)
+
+    def test_save_raises_when_model_disagrees_with_lock(self, tmp_path):
+        run_dir = tmp_path / "run_001"
+        run_dir.mkdir()
+        MetadataHelper.set_models(run_dir, "haiku", "sonnet")
+        scores = [{"scenario": "s", "score": 9, "reasoning": "ok", "criteria_breakdown": {}}]
+        with pytest.raises(ValueError, match="disagrees with locked judge_model"):
+            ResultsHelper.save(scores, "v1", run_dir / "v1" / "scores.json", model="haiku")
+
+    def test_save_passes_when_model_matches_lock(self, tmp_path):
+        run_dir = tmp_path / "run_001"
+        run_dir.mkdir()
+        MetadataHelper.set_models(run_dir, "haiku", "sonnet")
+        scores = [{"scenario": "s", "score": 9, "reasoning": "ok", "criteria_breakdown": {}}]
+        ResultsHelper.save(scores, "v1", run_dir / "v1" / "scores.json", model="sonnet")
+        assert (run_dir / "v1" / "scores.json").exists()
+
 
 class TestOutputHelper:
     def test_save_writes_outputs(self, tmp_path):
