@@ -68,9 +68,6 @@ class TestSetModelsCommand:
         assert meta["judge_model"] == "opus"
 
 
-import shutil
-
-
 class TestCloneForCrossvalCommand:
     def _setup_source_run(self, tmp_path, prompt="demo"):
         run_dir = _setup_run(tmp_path, prompt=prompt, run_id="run_001")
@@ -122,7 +119,7 @@ class TestCloneForCrossvalCommand:
     def test_clone_raises_when_source_run_missing(self, tmp_path, monkeypatch):
         _setup_run(tmp_path)  # creates run_001 but no v1/prompt.txt
         monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError, match="prompt.txt"):
             main([
                 "clone-for-crossval", "--prompt", "demo",
                 "--from-run-id", "run_999", "--from-version", "v1",
