@@ -251,9 +251,19 @@ def render_summary_page(run_id: str, metadata: dict, versions: list) -> str:
         rows.append(f"| [{v['label']}]({v['label']}.md) | {avg:.1f}/10 | {len(scores)} |")
     table = "\n".join(rows)
 
+    banner = ""
+    cv = metadata.get("cross_validation_of")
+    if cv:
+        src_run = cv["run_id"]
+        src_ver = cv["version"]
+        banner = (
+            f"> ← **Cross-validation of** [{src_run}/{src_ver}]"
+            f"(../{src_run}/{src_ver}.md)\n\n"
+        )
+
     return f"""{_HIDE_TOC_FRONT_MATTER}# Run {run_id} — Summary
 
-**Test model:** `{metadata.get('test_model', '?')}`  &nbsp;
+{banner}**Test model:** `{metadata.get('test_model', '?')}`  &nbsp;
 **Judge model:** `{metadata.get('judge_model', '?')}`
 
 | Version | Average | Cases |
