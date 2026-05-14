@@ -38,3 +38,31 @@ class TestSaveOutputWithModelFlag:
                 "save-output", "--prompt", "demo", "--run-id", "run_001",
                 "--version", "v1", "--model", "opus", "--json", payload,
             ])
+
+
+class TestSetModelsCommand:
+    def test_set_models_writes_config(self, tmp_path, monkeypatch):
+        run_dir = _setup_run(tmp_path)
+        monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+        rc = main([
+            "set-models", "--prompt", "demo", "--run-id", "run_001",
+            "--test-model", "haiku", "--judge-model", "sonnet",
+        ])
+        assert rc == 0
+        meta = MetadataHelper.read(run_dir)
+        assert meta["test_model"] == "haiku"
+        assert meta["judge_model"] == "sonnet"
+        assert meta["models_locked"] is True
+
+    def test_set_models_overwrites_existing(self, tmp_path, monkeypatch):
+        run_dir = _setup_run(tmp_path)
+        MetadataHelper.set_models(run_dir, "old_test", "old_judge")
+        monkeypatch.setenv("PROMPT_EVAL_PROJECT_DIR", str(tmp_path))
+        rc = main([
+            "set-models", "--prompt", "demo", "--run-id", "run_001",
+            "--test-model", "sonnet", "--judge-model", "opus",
+        ])
+        assert rc == 0
+        meta = MetadataHelper.read(run_dir)
+        assert meta["test_model"] == "sonnet"
+        assert meta["judge_model"] == "opus"

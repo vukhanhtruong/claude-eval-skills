@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 from prompt_eval.docs_generator import _load_version_results, regenerate_for_run
-from prompt_eval.data_helpers import DatasetHelper, OutputHelper, ResultsHelper
+from prompt_eval.data_helpers import DatasetHelper, MetadataHelper, OutputHelper, ResultsHelper
 
 
 MKDOCS_PORT = 8000
@@ -387,6 +387,17 @@ def _do_save_scores(
     _refresh_docs(prompt_name, run_id)
 
 
+def _do_set_models(
+    prompt_name: str, run_id: str, test_model: str, judge_model: str
+) -> None:
+    root = _resolve_artifact_root()
+    run_dir = root / "prompts" / prompt_name / "runs" / run_id
+    if not run_dir.exists():
+        raise FileNotFoundError(f"Run not found: {run_dir}")
+    MetadataHelper.set_models(run_dir, test_model, judge_model)
+    print(f"Locked models for {prompt_name}/{run_id}: test={test_model}, judge={judge_model}")
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="prompt-eval")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -422,6 +433,14 @@ def _build_parser() -> argparse.ArgumentParser:
     save_scores_parser.add_argument("--version", required=True)
     save_scores_parser.add_argument("--json", required=True, dest="json_data")
     save_scores_parser.add_argument("--model", required=False, default=None)
+
+    set_models_parser = sub.add_parser(
+        "set-models", help="Lock test_model and judge_model into metadata.json"
+    )
+    set_models_parser.add_argument("--prompt", required=True)
+    set_models_parser.add_argument("--run-id", required=True)
+    set_models_parser.add_argument("--test-model", required=True)
+    set_models_parser.add_argument("--judge-model", required=True)
 
     return p
 
@@ -467,6 +486,9 @@ def main(argv: list | None = None) -> int:
         _do_save_scores(
             args.prompt, args.run_id, args.version, args.json_data, args.model
         )
+        return 0
+    if args.cmd == "set-models":
+        _do_set_models(args.prompt, args.run_id, args.test_model, args.judge_model)
         return 0
     return 1
 
