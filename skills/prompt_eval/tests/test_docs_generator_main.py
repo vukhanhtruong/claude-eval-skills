@@ -36,6 +36,41 @@ def test_load_version_results_new_format(tmp_path):
     assert r["test_case"]["scenario"] == "Test S1"
 
 
+def test_load_version_results_falls_back_to_dataset_for_scenario(tmp_path):
+    """When scores.json cases lack 'scenario' (the real-world shape written by
+    save-scores), _load_version_results sources scenario from dataset.json by
+    case_index. Otherwise the per-case results table renders an empty first
+    column."""
+    run_dir = tmp_path / "run_001"
+    version_dir = run_dir / "v1"
+    version_dir.mkdir(parents=True)
+
+    dataset = [
+        {"scenario": "Happy path", "prompt_inputs": {"x": 1}, "solution_criteria": ["C1"]},
+        {"scenario": "Edge case", "prompt_inputs": {"x": 2}, "solution_criteria": ["C2"]},
+    ]
+    (run_dir / "dataset.json").write_text(json.dumps(dataset))
+
+    scores = {
+        "version": "v1",
+        "cases": [
+            {"case_index": 0, "score": 8, "reasoning": "ok", "criteria_breakdown": {"C1": "PASS"}},
+            {"case_index": 1, "score": 6, "reasoning": "meh", "criteria_breakdown": {"C2": "FAIL"}},
+        ],
+        "summary": {"average_score": 7.0, "pass_rate": 0.5, "total_cases": 2},
+    }
+    outputs = [
+        {"case_index": 0, "output": "out-0", "tool_calls": []},
+        {"case_index": 1, "output": "out-1", "tool_calls": []},
+    ]
+    (version_dir / "scores.json").write_text(json.dumps(scores))
+    (version_dir / "output.json").write_text(json.dumps(outputs))
+
+    results = _load_version_results(version_dir)
+
+    assert [r["test_case"]["scenario"] for r in results] == ["Happy path", "Edge case"]
+
+
 def test_load_version_results_legacy_format(tmp_path):
     """_load_version_results falls back to output.json when scores.json absent."""
     version_dir = tmp_path / "v1"

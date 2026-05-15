@@ -305,6 +305,13 @@ def _load_version_results(version_dir) -> list:
     version_dir = _Path(version_dir)
     scores_path = version_dir / "scores.json"
     output_path = version_dir / "output.json"
+    dataset_path = version_dir.parent / "dataset.json"
+
+    scenarios_by_index = {}
+    if dataset_path.exists():
+        dataset = json.loads(dataset_path.read_text())
+        for i, case in enumerate(dataset):
+            scenarios_by_index[i] = case.get("scenario", "")
 
     if scores_path.exists():
         scores_data = json.loads(scores_path.read_text())
@@ -316,12 +323,14 @@ def _load_version_results(version_dir) -> list:
                 outputs_by_index[o.get("case_index", 0)] = o.get("output", "")
         results = []
         for i, case in enumerate(cases):
+            idx = case.get("case_index", i)
+            scenario = case.get("scenario") or scenarios_by_index.get(idx, "")
             results.append({
-                "test_case": {"scenario": case.get("scenario", "")},
+                "test_case": {"scenario": scenario},
                 "score": case["score"],
                 "reasoning": case["reasoning"],
                 "criteria_breakdown": case.get("criteria_breakdown", {}),
-                "output": outputs_by_index.get(case.get("case_index", i), ""),
+                "output": outputs_by_index.get(idx, ""),
             })
         return results
 
