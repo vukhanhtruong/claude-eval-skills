@@ -370,6 +370,7 @@ Generate {cases} diverse test cases for this task. For each case, create:
 1. **scenario**: Brief description of what’s being tested (1 sentence)
 2. **prompt_inputs**: Concrete values matching the input spec from Phase B
 3. **solution_criteria**: 2-4 specific, measurable criteria for judging the output
+   > **Tool-use prompts:** When the prompt invokes tools that produce external artifacts (images, fetched data, generated files), write criteria that test the **tool call inputs** — e.g., `"The image_generation call includes a transformation prompt covering face shape, hair, and lighting."` Do **not** write criteria that test the artifact itself (e.g., `"Output includes a real image URL"`) — the eval harness mocks tool responses, so artifact-testing criteria can never be satisfied.
 
 Think through scenarios that test different aspects:
 - Happy path (typical use case)
