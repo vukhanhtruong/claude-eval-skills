@@ -402,13 +402,17 @@ Output as a JSON array. Example:
 
 **If you drafted the dataset (the user did not supply samples), confirm before saving.** Show the drafted cases as a numbered markdown list. For each case, render the `input` (truncate to ~200 chars + `…` if longer) and the full `solution_criteria` text. Then ask via `AskUserQuestion` with three options: **Approve** (proceed to `save-dataset`), **Request changes** (next user message describes what to change — drop cases, adjust criteria, add edge cases — then redraft and re-ask), **Start over** (scrap the draft, ask one or two fresh requirement questions, then redraft). Only call `save-dataset` after Approve. This gate does **not** fire when the user provided sample inputs directly.
 
-After generating, save via CLI:
+After generating, save via CLI. **Always pass payloads through a file** — inline `--json '...'` breaks on any apostrophe in user-generated content (`don't`, `product's`). Use the `Write` tool to drop the JSON at a temp path, then call `--json-file`:
+
+1. Use `Write` with `file_path="/tmp/prompt-eval-{prompt}-{run_id}-dataset.json"` and `content={generated_json}` (raw JSON text).
+2. Then run:
 ```bash
 uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval save-dataset \
   --prompt {prompt} \
   --run-id {run_id} \
-  --json '{generated_json}'
+  --json-file /tmp/prompt-eval-{prompt}-{run_id}-dataset.json
 ```
+This pattern (Write → `--json-file`) applies to every `save-*` call in this skill; never use inline `--json` for payloads built from model output.
 
 Read `prompt_eval_runs/prompts/{prompt}/runs/{run_id}/dataset.json` and show the user a summary of each test case.
 
@@ -450,12 +454,18 @@ After executing all cases, save outputs.
 
 **Pass ONLY these keys per case:** `case_index`, `output`, `tool_calls`. Do NOT include `score`, `reasoning`, `criteria_breakdown`, `test_case`, or `scenario` — those belong to `save-scores` (Step 3b) and only there. The CLI rejects payloads that carry scoring keys.
 
+First `Write` the payload to a temp file (`output` text often contains apostrophes which break inline `--json`):
+
+- `file_path="/tmp/prompt-eval-{prompt}-{run_id}-v{n}-output.json"`
+- `content=[{"case_index": 0, "output": "...", "tool_calls": []}, ...]` (as raw JSON text)
+
+Then:
 ```bash
 uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval save-output \
   --prompt {prompt} \
   --run-id {run_id} \
   --version v{n} \
-  --json '[{"case_index": 0, "output": "...", "tool_calls": []}, ...]'
+  --json-file /tmp/prompt-eval-{prompt}-{run_id}-v{n}-output.json
 ```
 
 ### 3b. Grade outputs (parallel subagents)
@@ -485,13 +495,18 @@ Agent(description="Grade case 1", subagent_type="llm-judge", prompt="## Test Cas
 Agent(description="Grade case 2", subagent_type="llm-judge", prompt="## Test Case\ncase_index: 2\n...")
 ```
 
-Collect all subagent JSON results into an array, then save:
+Collect all subagent JSON results into an array, `Write` it to a temp file, then call `save-scores --json-file` (judge `reasoning` text frequently contains apostrophes):
+
+- `file_path="/tmp/prompt-eval-{prompt}-{run_id}-v{n}-scores.json"`
+- `content=[{subagent_0_result}, {subagent_1_result}, ...]` (as raw JSON text)
+
+Then:
 ```bash
 uvx --from "${CLAUDE_SKILL_DIR}" prompt-eval save-scores \
   --prompt {prompt} \
   --run-id {run_id} \
   --version v{n} \
-  --json '[{subagent_0_result}, {subagent_1_result}, ...]'
+  --json-file /tmp/prompt-eval-{prompt}-{run_id}-v{n}-scores.json
 ```
 
 The CLI validates scores and calculates summary statistics (average_score, pass_rate). It also regenerates the docs site and (re)starts `mkdocs serve` in the background, printing a line like:

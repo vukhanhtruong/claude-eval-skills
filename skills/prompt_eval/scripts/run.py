@@ -441,6 +441,22 @@ def _do_clone_for_crossval(
     )
 
 
+def _add_json_payload_args(parser: argparse.ArgumentParser) -> None:
+    """Add a mutually-exclusive (--json | --json-file) payload group.
+
+    --json takes raw JSON text. --json-file takes a path whose contents are JSON.
+    The file path is preferred when payloads contain shell-hostile characters
+    (apostrophes, $, backticks); the skill writes payloads via the Write tool
+    and passes the path here to skip shell quoting entirely.
+    """
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--json", dest="json_data", help="raw JSON payload")
+    group.add_argument(
+        "--json-file", dest="json_file",
+        help="path to a file whose contents are the JSON payload",
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="prompt-eval")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -461,20 +477,20 @@ def _build_parser() -> argparse.ArgumentParser:
     save_dataset_parser = sub.add_parser("save-dataset", help="Save dataset.json")
     save_dataset_parser.add_argument("--prompt", required=True)
     save_dataset_parser.add_argument("--run-id", required=True)
-    save_dataset_parser.add_argument("--json", required=True, dest="json_data")
+    _add_json_payload_args(save_dataset_parser)
 
     save_output_parser = sub.add_parser("save-output", help="Save output.json")
     save_output_parser.add_argument("--prompt", required=True)
     save_output_parser.add_argument("--run-id", required=True)
     save_output_parser.add_argument("--version", required=True)
-    save_output_parser.add_argument("--json", required=True, dest="json_data")
+    _add_json_payload_args(save_output_parser)
     save_output_parser.add_argument("--model", required=False, default=None)
 
     save_scores_parser = sub.add_parser("save-scores", help="Save scores.json")
     save_scores_parser.add_argument("--prompt", required=True)
     save_scores_parser.add_argument("--run-id", required=True)
     save_scores_parser.add_argument("--version", required=True)
-    save_scores_parser.add_argument("--json", required=True, dest="json_data")
+    _add_json_payload_args(save_scores_parser)
     save_scores_parser.add_argument("--model", required=False, default=None)
 
     set_models_parser = sub.add_parser(
@@ -522,6 +538,12 @@ def main(argv: list | None = None) -> int:
 
     artifact_root = _resolve_artifact_root()
     _migrate_legacy_layout(artifact_root)
+    if getattr(args, "json_file", None):
+        try:
+            args.json_data = Path(args.json_file).read_text()
+        except OSError as e:
+            print(f"Error: cannot read --json-file {args.json_file}: {e}", file=sys.stderr)
+            return 2
     if args.cmd == "show":
         runs_dir = _resolve_runs_dir(args.prompt)
         out_dir = runs_dir / args.run_id
